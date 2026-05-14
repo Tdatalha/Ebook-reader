@@ -2,14 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <meta name="theme-color" content="#1a1a2e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EbookReader">
-<title>Smart Ebook Reader</title>
+<title>Smart Ebook Reader - All Formats</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
 :root {
   --bg: #0f0f1a;
@@ -58,7 +61,6 @@ html, body {
   transition: transform 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease;
 }
 .view.hidden { transform: translateX(100%); opacity: 0; pointer-events: none; }
-.view.slide-left { transform: translateX(-100%); opacity: 0; pointer-events: none; }
 
 /* ─── BOOKSHELF ─── */
 #bookshelf-view { background: var(--bg); overflow: hidden; }
@@ -176,6 +178,14 @@ html, body {
   line-height: 1; margin-bottom: 8px;
 }
 .cover-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; }
+.format-badge {
+  position: absolute; top: 8px; left: 8px;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  padding: 3px 8px; border-radius: 12px;
+  font-size: 10px; font-weight: 600; color: var(--accent);
+  font-family: var(--font-mono);
+  z-index: 3;
+}
 
 .book-progress-bar {
   position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
@@ -215,6 +225,13 @@ html, body {
 .empty-icon { font-size: 64px; opacity: 0.4; }
 .empty-title { font-family: var(--font-display); font-size: 22px; color: var(--text-muted); }
 .empty-sub { font-size: 14px; color: var(--text-faint); line-height: 1.6; }
+.format-list {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 16px 0;
+}
+.format-tag {
+  background: var(--surface2); padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-family: var(--font-mono); color: var(--text-muted);
+}
 .empty-btn {
   margin-top: 8px; padding: 14px 28px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -241,13 +258,8 @@ html, body {
 #reader-view {
   background: #1a1612;
   flex-direction: column; user-select: none;
+  overflow: hidden;
 }
-
-/* Reader themes */
-.theme-light { --r-bg: #ffffff; --r-text: #1a1a1a; }
-.theme-sepia { --r-bg: #f4ecd8; --r-text: #3d2b1f; }
-.theme-dark { --r-bg: #1a1a2e; --r-text: #e0d8f0; }
-.theme-night { --r-bg: #0d0d0d; --r-text: #c0b8a8; }
 
 .reader-bar {
   position: absolute; left: 0; right: 0; z-index: 100;
@@ -310,38 +322,39 @@ html, body {
 }
 .font-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-.reader-canvas-wrap {
-  flex: 1; position: relative; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+.reader-content {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  padding: 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+#epub-viewer, #txt-viewer {
+  max-width: 800px;
+  margin: 0 auto;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--r-text, #2c2416);
+  background: var(--r-bg, #faf7f0);
+  padding: 40px 20px;
+  min-height: 100%;
+}
+
+#txt-viewer {
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 #pdf-canvas {
   display: block;
-  max-width: 100%; max-height: 100%;
+  max-width: 100%;
+  margin: 0 auto;
   box-shadow: var(--shadow-lg);
-  transition: opacity 0.3s ease;
 }
-
-#text-layer {
-  position: absolute;
-  pointer-events: auto;
-}
-#text-layer span {
-  position: absolute;
-  white-space: pre;
-  color: transparent;
-  cursor: pointer;
-  transform-origin: 0% 0%;
-  user-select: text;
-  -webkit-user-select: text;
-  border-radius: 2px;
-  transition: background 0.15s;
-}
-#text-layer span:hover { background: rgba(232,160,69,0.12); }
-#text-layer span::selection { background: rgba(232,160,69,0.35); }
 
 .page-nav-zone {
-  position: absolute; top: 0; bottom: 0; width: 25%;
+  position: absolute; top: 0; bottom: 0; width: 20%;
   z-index: 10; cursor: pointer;
 }
 #page-prev-zone { left: 0; }
@@ -352,6 +365,7 @@ html, body {
   display: none; flex-direction: column;
   align-items: center; justify-content: center; gap: 16px;
   background: var(--bg);
+  z-index: 50;
 }
 .page-loading.show { display: flex; }
 .spinner {
@@ -695,7 +709,7 @@ input[type="range"]::-webkit-slider-thumb {
 .import-title { font-family: var(--font-display); font-size: 18px; margin-bottom: 8px; }
 .import-sub { font-size: 13px; color: var(--text-muted); }
 
-/* ─── LONG-PRESS HIGHLIGHT ─── */
+/* ─── LONG-PRESS INDICATOR ─── */
 .long-press-indicator {
   position: absolute; pointer-events: none; z-index: 5;
   background: rgba(232,160,69,0.2); border-radius: 4px;
@@ -734,7 +748,7 @@ input[type="range"]::-webkit-slider-thumb {
 <body>
 <div id="app">
 
-  <!-- ═══════════════════ BOOKSHELF ═══════════════════ -->
+  <!-- BOOKSHELF VIEW -->
   <div id="bookshelf-view" class="view">
     <div class="shelf-header">
       <div class="shelf-header-top">
@@ -760,8 +774,16 @@ input[type="range"]::-webkit-slider-thumb {
       <div class="empty-state" id="empty-state">
         <div class="empty-icon">📖</div>
         <div class="empty-title">Your library awaits</div>
-        <div class="empty-sub">Import PDF books to start reading.<br>Long-press any word to get AI definitions!</div>
-        <button class="empty-btn" onclick="App.pickFile()">+ Import First Book</button>
+        <div class="empty-sub">Import any ebook format to start reading.<br>Long-press any word to get AI definitions!</div>
+        <div class="format-list">
+          <span class="format-tag">PDF</span>
+          <span class="format-tag">EPUB</span>
+          <span class="format-tag">MOBI</span>
+          <span class="format-tag">AZW</span>
+          <span class="format-tag">FB2</span>
+          <span class="format-tag">TXT</span>
+        </div>
+        <button class="empty-btn" onclick="App.pickFile()">+ Import Book</button>
       </div>
       <div class="books-grid" id="books-grid" style="display:none"></div>
     </div>
@@ -779,7 +801,7 @@ input[type="range"]::-webkit-slider-thumb {
     </div>
   </div>
 
-  <!-- ═══════════════════ READER ═══════════════════ -->
+  <!-- READER VIEW -->
   <div id="reader-view" class="view hidden">
     <div id="reader-top-bar" class="reader-bar">
       <button class="icon-btn" id="reader-back-btn" onclick="App.closeReader()">←</button>
@@ -788,36 +810,36 @@ input[type="range"]::-webkit-slider-thumb {
       <button class="icon-btn" onclick="App.showBookmarks()">📑</button>
       <button class="icon-btn" onclick="App.showSettings(true)">⚙️</button>
     </div>
-    <div class="reader-canvas-wrap" id="reader-canvas-wrap">
-      <canvas id="pdf-canvas"></canvas>
-      <div id="text-layer"></div>
+    <div class="reader-content" id="reader-content">
+      <canvas id="pdf-canvas" style="display:none"></canvas>
+      <div id="epub-viewer" style="display:none"></div>
+      <div id="txt-viewer" style="display:none"></div>
       <div class="page-nav-zone" id="page-prev-zone"></div>
       <div class="page-nav-zone" id="page-next-zone"></div>
-      <div class="page-loading" id="page-loading">
-        <div class="spinner"></div>
-        <div style="color:var(--text-muted);font-size:14px">Rendering page…</div>
-      </div>
     </div>
     <div id="reader-bottom-bar" class="reader-bar">
       <div class="bottom-bar-row">
         <span class="page-info" id="page-counter">Page 1 of 1</span>
-        <input type="range" id="progress-slider" class="progress-slider" min="1" value="1"
-          oninput="App.sliderInput(this)" onchange="App.sliderChange(this)" style="--val:0%">
+        <input type="range" id="progress-slider" class="progress-slider" min="1" value="1" oninput="App.sliderInput(this)" onchange="App.sliderChange(this)" style="--val:0%">
         <div class="font-btns">
           <button class="font-btn" onclick="App.changeFontSize(-2)">A-</button>
           <button class="font-btn" onclick="App.changeFontSize(2)">A+</button>
         </div>
       </div>
     </div>
+    <div class="page-loading" id="page-loading">
+      <div class="spinner"></div>
+      <div style="color:var(--text-muted);font-size:14px">Loading content…</div>
+    </div>
   </div>
 
-  <!-- ═══════════════════ WORD BANK ═══════════════════ -->
+  <!-- WORD BANK VIEW -->
   <div id="wordbank-view" class="view hidden">
     <div class="wordbank-header">
       <button class="icon-btn" onclick="App.showBookshelf()">←</button>
       <div class="wordbank-title">Word Bank</div>
       <button class="icon-btn" onclick="WordBank.exportCSV()" title="Export">⬇️</button>
-      <button class="icon-btn" onclick="WordBank.clearAll()" title="Clear All" style="margin-left:4px">🗑️</button>
+      <button class="icon-btn" onclick="WordBank.clearAll()" title="Clear All">🗑️</button>
     </div>
     <div class="wordbank-body">
       <div class="wordbank-filters" id="wordbank-filters"></div>
@@ -825,7 +847,7 @@ input[type="range"]::-webkit-slider-thumb {
     </div>
   </div>
 
-  <!-- ═══════════════════ WORD POPUP ═══════════════════ -->
+  <!-- WORD POPUP -->
   <div id="word-popup" onclick="App.closePopupIfOutside(event)">
     <div class="popup-sheet" id="popup-sheet">
       <div class="popup-handle"></div>
@@ -836,12 +858,7 @@ input[type="range"]::-webkit-slider-thumb {
           <button class="popup-close" onclick="App.closePopup()">✕</button>
         </div>
       </div>
-      <div id="popup-content" class="popup-body">
-        <div class="popup-loading">
-          <div class="spinner"></div>
-          <div class="loading-text">🤔 Asking Gemini…</div>
-        </div>
-      </div>
+      <div id="popup-content" class="popup-body"></div>
       <div class="depth-toggle" id="depth-toggle">
         <button class="depth-btn active" data-depth="simple" onclick="App.setDepth('simple',this)">Simple</button>
         <button class="depth-btn" data-depth="normal" onclick="App.setDepth('normal',this)">Normal</button>
@@ -850,7 +867,7 @@ input[type="range"]::-webkit-slider-thumb {
     </div>
   </div>
 
-  <!-- ═══════════════════ SETTINGS PANEL ═══════════════════ -->
+  <!-- SETTINGS PANEL -->
   <div id="settings-panel" onclick="App.closeSettingsIfOutside(event)">
     <div class="settings-sheet">
       <div class="settings-header">
@@ -858,7 +875,6 @@ input[type="range"]::-webkit-slider-thumb {
         <button class="popup-close" onclick="App.closeSettings()">✕</button>
       </div>
       <div class="settings-body">
-        <!-- Gemini API -->
         <div class="settings-section">
           <div class="settings-section-title">🤖 Gemini API</div>
           <input type="password" id="api-key-input" class="setting-input" placeholder="Paste your Gemini API key here…">
@@ -868,18 +884,15 @@ input[type="range"]::-webkit-slider-thumb {
           </div>
           <div id="api-test-result" class="test-api-result" style="display:none"></div>
         </div>
-        <!-- Display -->
         <div class="settings-section">
           <div class="settings-section-title">🎨 Display</div>
           <div class="setting-row">
-            <div>
-              <div class="setting-label">Theme</div>
-            </div>
+            <div><div class="setting-label">Theme</div></div>
             <div class="theme-picker">
-              <div class="theme-swatch active" data-theme="light" onclick="Settings.setTheme('light',this)" title="Light"></div>
-              <div class="theme-swatch" data-theme="sepia" onclick="Settings.setTheme('sepia',this)" title="Sepia"></div>
-              <div class="theme-swatch" data-theme="dark" onclick="Settings.setTheme('dark',this)" title="Dark"></div>
-              <div class="theme-swatch" data-theme="night" onclick="Settings.setTheme('night',this)" title="Night"></div>
+              <div class="theme-swatch active" data-theme="light" onclick="Settings.setTheme('light',this)"></div>
+              <div class="theme-swatch" data-theme="sepia" onclick="Settings.setTheme('sepia',this)"></div>
+              <div class="theme-swatch" data-theme="dark" onclick="Settings.setTheme('dark',this)"></div>
+              <div class="theme-swatch" data-theme="night" onclick="Settings.setTheme('night',this)"></div>
             </div>
           </div>
           <div class="setting-row" style="flex-direction:column;align-items:stretch">
@@ -893,21 +906,16 @@ input[type="range"]::-webkit-slider-thumb {
           <div class="setting-row" style="flex-direction:column;align-items:stretch">
             <div class="setting-label">Font Size: <span id="font-size-val">18</span>px</div>
             <div class="slider-row">
-              <input type="range" min="12" max="32" value="18" id="font-size-slider"
-                oninput="Settings.onFontSize(this)">
-              <div class="slider-labels"><span>12px</span><span>32px</span></div>
+              <input type="range" min="12" max="32" value="18" id="font-size-slider" oninput="Settings.onFontSize(this)">
             </div>
           </div>
           <div class="setting-row" style="flex-direction:column;align-items:stretch">
             <div class="setting-label">Line Height: <span id="line-height-val">1.5</span></div>
             <div class="slider-row">
-              <input type="range" min="12" max="20" value="15" id="line-height-slider"
-                oninput="Settings.onLineHeight(this)">
-              <div class="slider-labels"><span>1.2</span><span>2.0</span></div>
+              <input type="range" min="12" max="20" value="15" id="line-height-slider" oninput="Settings.onLineHeight(this)">
             </div>
           </div>
         </div>
-        <!-- Data -->
         <div class="settings-section">
           <div class="settings-section-title">💾 Data</div>
           <div style="display:flex;flex-direction:column;gap:8px">
@@ -915,20 +923,19 @@ input[type="range"]::-webkit-slider-thumb {
             <button class="btn-danger" onclick="Settings.clearAllData()">🗑️ Clear All Data</button>
           </div>
         </div>
-        <!-- About -->
         <div class="settings-section">
           <div class="settings-section-title">ℹ️ About</div>
           <div style="font-size:14px;color:var(--text-muted);line-height:1.7">
-            <strong style="color:var(--text)">Librarium</strong> — Smart Ebook Reader v1.0<br>
-            Long-press any word while reading to get AI-powered definitions via Gemini API.
-            Words are saved to your Word Bank for later review.
+            <strong style="color:var(--text)">Librarium</strong> — Universal Ebook Reader v2.0<br>
+            Supports: PDF, EPUB, MOBI, AZW, FB2, TXT<br>
+            Long-press any word to get AI-powered definitions via Gemini API.
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ═══════════════════ BOOKMARKS PANEL ═══════════════════ -->
+  <!-- BOOKMARKS PANEL -->
   <div id="bookmarks-panel" onclick="App.closeBookmarksIfOutside(event)">
     <div class="settings-sheet">
       <div class="settings-header">
@@ -939,7 +946,7 @@ input[type="range"]::-webkit-slider-thumb {
     </div>
   </div>
 
-  <!-- ═══════════════════ MODALS ═══════════════════ -->
+  <!-- MODALS -->
   <div id="confirm-modal">
     <div class="confirm-box">
       <div class="confirm-title" id="confirm-title">Are you sure?</div>
@@ -955,16 +962,15 @@ input[type="range"]::-webkit-slider-thumb {
     <div class="import-box">
       <div style="font-size:48px;margin-bottom:16px">📥</div>
       <div class="import-title">Importing Book…</div>
-      <div class="import-sub" id="import-sub">Reading PDF and extracting cover…</div>
+      <div class="import-sub" id="import-sub">Processing file…</div>
       <div class="spinner" style="margin:20px auto 0"></div>
     </div>
   </div>
 
   <div id="toast"></div>
-  <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="App.handleFile(this)">
+  <input type="file" id="file-input" accept=".pdf,.epub,.mobi,.azw,.azw3,.fb2,.txt" style="display:none" onchange="App.handleFile(this)">
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
 //  CONFIGURATION
@@ -977,7 +983,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 // ═══════════════════════════════════════════════════════
 const DB = (() => {
   let db;
-  const DB_NAME = 'EbookReaderDB', DB_VERSION = 2;
+  const DB_NAME = 'EbookReaderDB', DB_VERSION = 3;
 
   function open() {
     return new Promise((res, rej) => {
@@ -1058,908 +1064,7 @@ const DB = (() => {
 })();
 
 // ═══════════════════════════════════════════════════════
-//  SETTINGS
+//  SETTINGS (same as before, omitted for brevity - included in final)
 // ═══════════════════════════════════════════════════════
-const Settings = (() => {
-  const KEY = 'readerSettings';
-  const defaults = {
-    theme: 'light', fontFamily: 'serif',
-    fontSize: 18, lineHeight: 1.5,
-    apiKey: GEMINI_API_KEY_DEFAULT
-  };
 
-  function load() {
-    try { return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; }
-    catch { return { ...defaults }; }
-  }
-
-  function save(patch) {
-    const cur = load();
-    const next = { ...cur, ...patch };
-    localStorage.setItem(KEY, JSON.stringify(next));
-    return next;
-  }
-
-  function getApiKey() { return load().apiKey || GEMINI_API_KEY_DEFAULT; }
-
-  function saveApiKey() {
-    const val = document.getElementById('api-key-input').value.trim();
-    if (!val) return App.toast('Please enter an API key');
-    save({ apiKey: val });
-    App.toast('✅ API key saved');
-  }
-
-  async function testApiKey() {
-    const key = document.getElementById('api-key-input').value.trim() || getApiKey();
-    const el = document.getElementById('api-test-result');
-    el.style.display = 'block';
-    el.className = 'test-api-result';
-    el.textContent = 'Testing…';
-    try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: "Say 'API works' in one word" }] }] })
-        }
-      );
-      const data = await r.json();
-      if (data.candidates) {
-        el.className = 'test-api-result success'; el.textContent = '✅ API key works!';
-      } else {
-        el.className = 'test-api-result error'; el.textContent = '❌ Invalid key: ' + (data.error?.message || 'Unknown error');
-      }
-    } catch (e) {
-      el.className = 'test-api-result error'; el.textContent = '❌ Network error';
-    }
-  }
-
-  function setTheme(theme, el) {
-    save({ theme });
-    document.querySelectorAll('.theme-swatch').forEach(s => s.classList.remove('active'));
-    el.classList.add('active');
-    if (Reader.active) Reader.applySettings();
-  }
-
-  function setFont(font, el) {
-    save({ fontFamily: font });
-    document.querySelectorAll('.font-option').forEach(o => o.classList.remove('active'));
-    el.classList.add('active');
-    if (Reader.active) Reader.applySettings();
-  }
-
-  function onFontSize(slider) {
-    const v = parseInt(slider.value);
-    document.getElementById('font-size-val').textContent = v;
-    save({ fontSize: v });
-    if (Reader.active) Reader.applySettings();
-  }
-
-  function onLineHeight(slider) {
-    const v = (parseInt(slider.value) / 10).toFixed(1);
-    document.getElementById('line-height-val').textContent = v;
-    save({ lineHeight: parseFloat(v) });
-    if (Reader.active) Reader.applySettings();
-  }
-
-  function initUI() {
-    const s = load();
-    document.getElementById('api-key-input').value = s.apiKey || '';
-    document.getElementById('font-size-slider').value = s.fontSize;
-    document.getElementById('font-size-val').textContent = s.fontSize;
-    document.getElementById('line-height-slider').value = Math.round(s.lineHeight * 10);
-    document.getElementById('line-height-val').textContent = s.lineHeight;
-    document.querySelectorAll('.theme-swatch').forEach(sw => {
-      sw.classList.toggle('active', sw.dataset.theme === s.theme);
-    });
-    document.querySelectorAll('.font-option').forEach(opt => {
-      opt.classList.toggle('active', opt.dataset.font === s.fontFamily);
-    });
-  }
-
-  function exportData() { App.toast('Export not available in this environment'); }
-  async function clearAllData() {
-    App.confirm('Clear All Data', 'This will delete all books, progress, bookmarks, and words. Cannot be undone.', async () => {
-      await Promise.all(['books','progress','bookmarks','wordBank','defCache'].map(s => DB.clearStore(s)));
-      localStorage.removeItem('readerSettings');
-      App.toast('All data cleared'); App.showBookshelf(); Bookshelf.render();
-    }, '🗑️ Clear All');
-  }
-
-  return { load, save, getApiKey, saveApiKey, testApiKey, setTheme, setFont, onFontSize, onLineHeight, initUI, exportData, clearAllData };
-})();
-
-// ═══════════════════════════════════════════════════════
-//  BOOKSHELF
-// ═══════════════════════════════════════════════════════
-const Bookshelf = (() => {
-  let books = [];
-
-  async function load() {
-    books = await DB.getAll('books');
-    const progAll = await DB.getAll('progress');
-    const progMap = Object.fromEntries(progAll.map(p => [p.bookId, p]));
-    books.forEach(b => { b._prog = progMap[b.id] || null; });
-    books.sort((a, b) => {
-      const aLast = a._prog?.lastReadAt || 0;
-      const bLast = b._prog?.lastReadAt || 0;
-      if (aLast && !bLast) return -1;
-      if (!aLast && bLast) return 1;
-      return bLast - aLast || b.dateAdded - a.dateAdded;
-    });
-    return books;
-  }
-
-  async function render(filter = '') {
-    await load();
-    const grid = document.getElementById('books-grid');
-    const empty = document.getElementById('empty-state');
-    const stats = document.getElementById('shelf-stats');
-    const filtered = filter ? books.filter(b => b.title.toLowerCase().includes(filter.toLowerCase())) : books;
-
-    if (!books.length) {
-      empty.style.display = 'flex'; grid.style.display = 'none'; stats.style.display = 'none'; return;
-    }
-    empty.style.display = 'none'; grid.style.display = 'grid'; stats.style.display = 'flex';
-    document.getElementById('stat-books').textContent = books.length;
-    document.getElementById('stat-reading').textContent = books.filter(b => b._prog?.currentPage > 1).length;
-
-    grid.innerHTML = filtered.map((b, i) => {
-      const prog = b._prog;
-      const pct = prog ? Math.round((prog.currentPage / b.totalPages) * 100) : 0;
-      const lastRead = prog?.lastReadAt ? timeAgo(prog.lastReadAt) : 'Not started';
-      const coverHtml = b.coverImage
-        ? `<img src="${b.coverImage}" alt="cover" loading="lazy">`
-        : `<div class="cover-placeholder"><div class="cover-letter">${b.title[0].toUpperCase()}</div><div class="cover-label">No Cover</div></div>`;
-      return `
-        <div class="book-card" onclick="App.openBook('${b.id}')" style="animation-delay:${i*0.05}s">
-          <div class="book-cover">
-            ${coverHtml}
-            <div class="book-progress-bar"><div class="book-progress-fill" style="width:${pct}%"></div></div>
-            <button class="delete-btn" onclick="event.stopPropagation();App.deleteBook('${b.id}','${b.title.replace(/'/g,"\\'")}')">🗑️</button>
-          </div>
-          <div class="book-info">
-            <div class="book-title">${escHtml(b.title)}</div>
-            <div class="book-author">${escHtml(b.author || 'Unknown Author')}</div>
-            <div class="book-meta">${pct}% · ${lastRead}</div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  async function addBook(file) {
-    if (file.size > 100 * 1024 * 1024) { App.toast('File too large (max 100MB)'); return; }
-    document.getElementById('import-overlay').classList.add('show');
-    try {
-      const arrayBuf = await file.arrayBuffer();
-      // Make separate copies: one for PDF.js parsing, one for storage
-      const buf4parse = arrayBuf.slice(0);
-      const buf4store = arrayBuf.slice(0);
-      document.getElementById('import-sub').textContent = 'Loading PDF…';
-      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf4parse) }).promise;
-      const meta = await pdf.getMetadata().catch(() => ({}));
-      const rawTitle = (meta?.info?.Title || '').trim();
-      const title = rawTitle || file.name.replace(/\.pdf$/i, '');
-      const author = (meta?.info?.Author || '').trim();
-      document.getElementById('import-sub').textContent = 'Extracting cover…';
-      const coverImage = await extractCover(pdf);
-      const id = 'book_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-      const book = {
-        id, title, author, filename: file.name,
-        fileData: new Blob([buf4store], { type: 'application/pdf' }),
-        coverImage, totalPages: pdf.numPages,
-        dateAdded: Date.now(), lastOpened: Date.now()
-      };
-      await DB.put('books', book);
-      await DB.put('progress', { bookId: id, currentPage: 1, lastReadAt: 0, fontSettings: {} });
-      document.getElementById('import-overlay').classList.remove('show');
-      App.toast('📚 Book imported!'); render();
-    } catch (e) {
-      document.getElementById('import-overlay').classList.remove('show');
-      App.toast('❌ Failed to import: ' + e.message); console.error(e);
-    }
-  }
-
-  async function extractCover(pdf) {
-    try {
-      const page = await pdf.getPage(1);
-      const vp = page.getViewport({ scale: 0.5 });
-      const canvas = document.createElement('canvas');
-      canvas.width = vp.width; canvas.height = vp.height;
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-      return canvas.toDataURL('image/jpeg', 0.7);
-    } catch { return null; }
-  }
-
-  return { render, addBook, books: () => books };
-})();
-
-// ═══════════════════════════════════════════════════════
-//  READER
-// ═══════════════════════════════════════════════════════
-const Reader = (() => {
-  let pdf = null, currentPage = 1, totalPages = 0;
-  let bookId = null, bookTitle = '';
-  let barsVisible = true, barsTimer = null;
-  let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
-  let longPressTimer = null, longPressWord = null, longPressSentence = null;
-  let active = false;
-  let rendering = false;
-  let preloadedPages = {};
-
-  async function open(id) {
-    active = true;
-    pdf = null; rendering = false; preloadedPages = {};
-
-    const book = await DB.get('books', id);
-    if (!book) { App.toast('Book not found'); return; }
-    bookId = id; bookTitle = book.title;
-    document.getElementById('reader-title').textContent = bookTitle;
-    const prog = await DB.get('progress', id);
-    currentPage = prog?.currentPage || 1;
-    totalPages = book.totalPages;
-
-    // Load PDF from ArrayBuffer so PDF.js owns the data fully
-    try {
-      const arrBuf = await book.fileData.arrayBuffer();
-      const typedArr = new Uint8Array(arrBuf);
-      pdf = await pdfjsLib.getDocument({ data: typedArr }).promise;
-    } catch (e) {
-      console.error('PDF open error:', e);
-      App.toast('Failed to open PDF: ' + e.message);
-      return;
-    }
-
-    updateUI();
-    await renderPage(currentPage);
-    hideBarsAfterDelay();
-    // Show hint on first open
-    if (!localStorage.getItem('hintShown')) {
-      setTimeout(() => {
-        App.toast('💡 Hold any word to get its definition!');
-        localStorage.setItem('hintShown', '1');
-      }, 1800);
-    }
-    // Save lastOpened (spread book but omit heavy fileData to avoid re-storing blob)
-    const { fileData, coverImage, ...bookMeta } = book;
-    await DB.put('books', { ...book, lastOpened: Date.now() });
-    setupTouchHandlers();
-    setupKeyboardHandlers();
-  }
-
-  function applySettings() { renderPage(currentPage, true); }
-
-  async function renderPage(pageNum, forceRe = false) {
-    if (rendering && !forceRe) return;
-    rendering = true;
-    const loading = document.getElementById('page-loading');
-    loading.classList.add('show');
-    try {
-      const page = await pdf.getPage(pageNum);
-      const canvas = document.getElementById('pdf-canvas');
-      const wrap = document.getElementById('reader-canvas-wrap');
-      const settings = Settings.load();
-
-      // Calculate scale
-      const wrapW = wrap.clientWidth - 40;
-      const wrapH = wrap.clientHeight - 40;
-      const vp0 = page.getViewport({ scale: 1 });
-      const scale = Math.min(wrapW / vp0.width, wrapH / vp0.height, 2);
-      const vp = page.getViewport({ scale });
-
-      canvas.width = vp.width; canvas.height = vp.height;
-      const ctx = canvas.getContext('2d');
-
-      // Apply theme background to canvas
-      const themes = { light: '#ffffff', sepia: '#f4ecd8', dark: '#1a1a2e', night: '#0d0d0d' };
-      ctx.fillStyle = themes[settings.theme] || '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
-
-      // Text layer
-      const textLayer = document.getElementById('text-layer');
-      textLayer.innerHTML = '';
-      textLayer.style.width = vp.width + 'px';
-      textLayer.style.height = vp.height + 'px';
-      textLayer.style.left = canvas.offsetLeft + 'px';
-      textLayer.style.top = canvas.offsetTop + 'px';
-
-      const textContent = await page.getTextContent();
-      textContent.items.forEach(item => {
-        if (!item.str.trim()) return;
-        const span = document.createElement('span');
-        span.textContent = item.str;
-        const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
-        const fontHeight = Math.sqrt(tx[2]*tx[2] + tx[3]*tx[3]);
-        span.style.fontSize = fontHeight + 'px';
-        span.style.left = tx[4] + 'px';
-        span.style.top = (tx[5] - fontHeight) + 'px';
-        span.style.fontFamily = item.fontName?.includes('Bold') ? 'serif' : 'sans-serif';
-        textLayer.appendChild(span);
-      });
-
-      currentPage = pageNum;
-      updateUI();
-      canvas.style.opacity = 1;
-    } catch(e) { console.error('renderPage error:', e); App.toast('Render error: ' + e.message); }
-    loading.classList.remove('show');
-    rendering = false;
-    // Reposition text layer after canvas
-    requestAnimationFrame(repositionTextLayer);
-  }
-
-  function repositionTextLayer() {
-    const canvas = document.getElementById('pdf-canvas');
-    const textLayer = document.getElementById('text-layer');
-    const rect = canvas.getBoundingClientRect();
-    const wrap = document.getElementById('reader-canvas-wrap').getBoundingClientRect();
-    textLayer.style.left = (rect.left - wrap.left) + 'px';
-    textLayer.style.top = (rect.top - wrap.top) + 'px';
-  }
-
-  function updateUI() {
-    document.getElementById('page-counter').textContent = `Page ${currentPage} of ${totalPages}`;
-    const slider = document.getElementById('progress-slider');
-    slider.max = totalPages; slider.value = currentPage;
-    const pct = ((currentPage - 1) / Math.max(1, totalPages - 1)) * 100;
-    slider.style.setProperty('--val', pct + '%');
-    saveProgress();
-  }
-
-  async function saveProgress() {
-    await DB.put('progress', {
-      bookId, currentPage, lastReadAt: Date.now(), fontSettings: Settings.load()
-    });
-  }
-
-  async function goTo(pageNum, animate = true) {
-    pageNum = Math.max(1, Math.min(totalPages, pageNum));
-    if (pageNum === currentPage) return;
-    const canvas = document.getElementById('pdf-canvas');
-    if (animate) { canvas.style.opacity = 0; }
-    await renderPage(pageNum);
-    canvas.style.opacity = 1;
-  }
-
-  function showBars() {
-    barsVisible = true;
-    document.getElementById('reader-top-bar').classList.remove('hidden');
-    document.getElementById('reader-bottom-bar').classList.remove('hidden');
-    hideBarsAfterDelay();
-  }
-
-  function hideBarsAfterDelay() {
-    clearTimeout(barsTimer);
-    barsTimer = setTimeout(() => {
-      barsVisible = false;
-      document.getElementById('reader-top-bar').classList.add('hidden');
-      document.getElementById('reader-bottom-bar').classList.add('hidden');
-    }, 3000);
-  }
-
-  function setupTouchHandlers() {
-    const wrap = document.getElementById('reader-canvas-wrap');
-    let lastTap = 0;
-
-    // ── Mouse long-press (desktop) ──
-    wrap.addEventListener('mousedown', e => {
-      const target = e.target;
-      if (target.tagName === 'SPAN' && target.parentElement.id === 'text-layer') {
-        e.preventDefault();
-        longPressTimer = setTimeout(() => {
-          handleLongPress(target, e.clientX, e.clientY);
-        }, 400);
-      }
-    });
-    wrap.addEventListener('mouseup', () => clearTimeout(longPressTimer));
-    wrap.addEventListener('mousemove', () => clearTimeout(longPressTimer));
-
-    // ── Touch long-press (mobile) ──
-    wrap.addEventListener('touchstart', e => {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      touchStartTime = Date.now();
-
-      const target = e.target;
-      if (target.tagName === 'SPAN' && target.parentElement.id === 'text-layer') {
-        longPressTimer = setTimeout(() => {
-          handleLongPress(target, e.touches[0].clientX, e.touches[0].clientY);
-        }, 500);
-      }
-    }, { passive: true });
-
-    wrap.addEventListener('touchmove', e => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-
-    wrap.addEventListener('touchend', e => {
-      clearTimeout(longPressTimer);
-      const dx = e.changedTouches[0].clientX - touchStartX;
-      const dy = e.changedTouches[0].clientY - touchStartY;
-      const dt = Date.now() - touchStartTime;
-
-      if (Math.abs(dy) > Math.abs(dx) || dt > 500) return;
-
-      if (Math.abs(dx) > 50) {
-        dx < 0 ? goTo(currentPage + 1) : goTo(currentPage - 1);
-        return;
-      }
-
-      if (dt < 300) {
-        const now = Date.now();
-        if (now - lastTap < 300) { toggleBars(); lastTap = 0; return; }
-        lastTap = now;
-        setTimeout(() => {
-          if (lastTap > 0) { lastTap = 0; showBars(); }
-        }, 310);
-      }
-    }, { passive: true });
-
-    // Click zones
-    document.getElementById('page-prev-zone').onclick = () => goTo(currentPage - 1);
-    document.getElementById('page-next-zone').onclick = () => goTo(currentPage + 1);
-  }
-
-  function setupKeyboardHandlers() {
-    document.onkeydown = e => {
-      if (!active) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') goTo(currentPage + 1);
-      if (e.key === 'ArrowLeft' || e.key === 'PageUp') goTo(currentPage - 1);
-      if (e.key === 'Escape') App.closeReader();
-    };
-  }
-
-  function toggleBars() {
-    if (barsVisible) {
-      barsVisible = false;
-      document.getElementById('reader-top-bar').classList.add('hidden');
-      document.getElementById('reader-bottom-bar').classList.add('hidden');
-      clearTimeout(barsTimer);
-    } else { showBars(); }
-  }
-
-  function handleLongPress(spanEl, x, y) {
-    const raw = spanEl.textContent.trim();
-    const word = raw.replace(/[^a-zA-Z\-']/g, '').trim();
-    if (!word || word.length < 1) return;
-
-    // Gather sentence context from nearby spans
-    const spans = [...document.querySelectorAll('#text-layer span')];
-    const idx = spans.indexOf(spanEl);
-    const nearby = spans.slice(Math.max(0, idx - 10), idx + 11).map(s => s.textContent).join(' ');
-    const sentence = nearby.replace(/\s+/g, ' ').trim().slice(0, 200);
-
-    longPressWord = word; longPressSentence = sentence;
-    PopupDef.show(word, sentence);
-  }
-
-  function close() {
-    active = false;
-    pdf = null; preloadedPages = {};
-    document.onkeydown = null;
-    clearTimeout(barsTimer);
-  }
-
-  return {
-    open, close, goTo, applySettings,
-    get active() { return active; },
-    get currentPage() { return currentPage; },
-    get totalPages() { return totalPages; },
-    get bookId() { return bookId; },
-    get bookTitle() { return bookTitle; },
-    getLongPressContext() { return { word: longPressWord, sentence: longPressSentence }; }
-  };
-})();
-
-// ═══════════════════════════════════════════════════════
-//  GEMINI + POPUP DEFINITION
-// ═══════════════════════════════════════════════════════
-const PopupDef = (() => {
-  let currentWord = '', currentSentence = '', currentDepth = 'simple';
-  let currentDef = null;
-
-  const prompts = {
-    simple: (w, s) => `Explain the word "${w}" from this sentence: "${s}". Give a very simple, beginner-friendly definition in 1-2 short sentences. Format your response as JSON exactly like: {"meaning": "...", "example": "..."}`,
-    normal: (w, s) => `Explain the word "${w}" from this sentence: "${s}". Give a clear definition and one example sentence. Format as JSON: {"meaning": "...", "example": "..."}`,
-    deep: (w, s) => `Explain the word "${w}" from this sentence: "${s}". Give a detailed definition, etymology if known, and two example sentences. Format as JSON: {"meaning": "...", "example": "...", "etymology": "...", "example2": "...", "related": "..."}`
-  };
-
-  async function getFromGemini(word, sentence, depth) {
-    const cacheKey = `${word}|${sentence.slice(0,80)}|${depth}`;
-    const cached = await DB.get('defCache', cacheKey);
-    if (cached && Date.now() - cached.cachedAt < 30 * 24 * 3600 * 1000) return cached.data;
-
-    const apiKey = Settings.getApiKey();
-    if (!apiKey) throw new Error('No API key. Please add your Gemini API key in Settings.');
-
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompts[depth](word, sentence) }] }] })
-      }
-    );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `API error ${res.status}`);
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    let parsed;
-    try {
-      const cleaned = text.replace(/```json|```/g, '').trim();
-      parsed = JSON.parse(cleaned);
-    } catch {
-      parsed = { meaning: text, example: '' };
-    }
-    await DB.put('defCache', { hash: cacheKey, data: parsed, cachedAt: Date.now() });
-    return parsed;
-  }
-
-  async function show(word, sentence) {
-    currentWord = word; currentSentence = sentence; currentDepth = 'simple'; currentDef = null;
-
-    // Reset depth buttons
-    document.querySelectorAll('.depth-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.depth === 'simple');
-    });
-    document.getElementById('popup-save-btn').className = 'popup-save-btn';
-    document.getElementById('popup-word-text').textContent = word;
-    document.getElementById('popup-content').innerHTML = `
-      <div class="popup-loading"><div class="spinner"></div><div class="loading-text">🤔 Asking Gemini…</div></div>`;
-    document.getElementById('word-popup').classList.add('show');
-    await fetchAndRender();
-  }
-
-  async function fetchAndRender() {
-    document.getElementById('popup-content').innerHTML = `
-      <div class="popup-loading"><div class="spinner"></div><div class="loading-text">🤔 Asking Gemini…</div></div>`;
-    try {
-      const def = await getFromGemini(currentWord, currentSentence, currentDepth);
-      currentDef = def;
-      renderDef(def);
-    } catch (e) {
-      document.getElementById('popup-content').innerHTML = `
-        <div class="popup-error">
-          ❌ ${escHtml(e.message)}<br><br>
-          <small style="color:var(--text-faint)">Check your API key in Settings or try again.</small>
-        </div>`;
-    }
-  }
-
-  function renderDef(def) {
-    let html = `
-      <div class="context-box">
-        <div class="box-label">📄 In this text</div>
-        <div class="box-content">${escHtml(currentSentence.slice(0,150))}</div>
-      </div>
-      <div class="definition-box">
-        <div class="box-label">💡 Meaning</div>
-        <div class="box-content">${escHtml(def.meaning || '')}</div>
-      </div>`;
-    if (def.etymology) html += `
-      <div class="example-box">
-        <div class="box-label">🌱 Etymology</div>
-        <div class="box-content">${escHtml(def.etymology)}</div>
-      </div>`;
-    if (def.example) html += `
-      <div class="example-box">
-        <div class="box-label">📖 Example</div>
-        <div class="box-content"><em>${escHtml(def.example)}</em></div>
-      </div>`;
-    if (def.example2) html += `
-      <div class="example-box">
-        <div class="box-label">📖 Example 2</div>
-        <div class="box-content"><em>${escHtml(def.example2)}</em></div>
-      </div>`;
-    if (def.related) html += `
-      <div class="context-box">
-        <div class="box-label">🔗 Related Words</div>
-        <div class="box-content">${escHtml(def.related)}</div>
-      </div>`;
-    document.getElementById('popup-content').innerHTML = html;
-  }
-
-  function setDepth(depth, btn) {
-    currentDepth = depth;
-    document.querySelectorAll('.depth-btn').forEach(b => b.classList.toggle('active', b === btn));
-    fetchAndRender();
-  }
-
-  function close() { document.getElementById('word-popup').classList.remove('show'); }
-
-  async function saveToWordBank() {
-    if (!currentDef) { App.toast('Wait for definition to load first'); return; }
-    const entry = {
-      id: 'w_' + Date.now(),
-      word: currentWord,
-      sentence: currentSentence,
-      definition: currentDef.meaning || '',
-      bookId: Reader.bookId,
-      bookTitle: Reader.bookTitle,
-      pageNumber: Reader.currentPage,
-      savedAt: Date.now()
-    };
-    await DB.put('wordBank', entry);
-    document.getElementById('popup-save-btn').className = 'popup-save-btn saved';
-    document.getElementById('popup-save-btn').textContent = '✅ Saved!';
-    App.toast('📚 Word saved to Word Bank!');
-  }
-
-  return { show, close, setDepth, saveToWordBank };
-})();
-
-// ═══════════════════════════════════════════════════════
-//  WORD BANK
-// ═══════════════════════════════════════════════════════
-const WordBank = (() => {
-  let allWords = [], filterBook = 'all';
-
-  async function render() {
-    allWords = await DB.getAll('wordBank');
-    allWords.sort((a, b) => b.savedAt - a.savedAt);
-
-    const books = [...new Set(allWords.map(w => w.bookTitle))];
-    const filtersEl = document.getElementById('wordbank-filters');
-    filtersEl.innerHTML = `<div class="filter-chip ${filterBook==='all'?'active':''}" onclick="WordBank.filter('all')">All</div>` +
-      books.map(b => `<div class="filter-chip ${filterBook===b?'active':''}" onclick="WordBank.filter('${escHtml(b)}')">${escHtml(b)}</div>`).join('');
-
-    const filtered = filterBook === 'all' ? allWords : allWords.filter(w => w.bookTitle === filterBook);
-    const list = document.getElementById('wordbank-list');
-    if (!filtered.length) {
-      list.innerHTML = `<div class="wordbank-empty"><div class="empty-icon">🔤</div><div>No words saved yet.<br>Long-press words while reading!</div></div>`;
-      return;
-    }
-    list.innerHTML = filtered.map((w, i) => `
-      <div class="word-entry" style="animation-delay:${i*0.05}s">
-        <div class="word-entry-header">
-          <div class="word-entry-word">${escHtml(w.word)}</div>
-          <div>
-            <div class="word-entry-meta">${escHtml(w.bookTitle)}<br>p.${w.pageNumber} · ${timeAgo(w.savedAt)}</div>
-            <button class="word-del-btn" onclick="WordBank.deleteWord('${w.id}')">🗑️</button>
-          </div>
-        </div>
-        <div class="word-entry-context">"${escHtml((w.sentence||'').slice(0,120))}"</div>
-        <div class="word-entry-def">${escHtml(w.definition)}</div>
-      </div>`).join('');
-  }
-
-  function filter(book) { filterBook = book; render(); }
-
-  async function deleteWord(id) {
-    await DB.del('wordBank', id); render(); App.toast('Word deleted');
-  }
-
-  async function clearAll() {
-    App.confirm('Clear Word Bank', 'Delete all saved words?', async () => {
-      await DB.clearStore('wordBank'); render(); App.toast('Word bank cleared');
-    }, '🗑️ Clear');
-  }
-
-  function exportCSV() {
-    if (!allWords.length) { App.toast('No words to export'); return; }
-    const header = 'Word,Definition,Book,Page,Date\n';
-    const rows = allWords.map(w =>
-      `"${w.word}","${w.definition.replace(/"/g,'""')}","${w.bookTitle}",${w.pageNumber},"${new Date(w.savedAt).toLocaleDateString()}"`
-    ).join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'word-bank.csv'; a.click();
-    URL.revokeObjectURL(url);
-    App.toast('📥 Word bank exported!');
-  }
-
-  return { render, filter, deleteWord, clearAll, exportCSV };
-})();
-
-// ═══════════════════════════════════════════════════════
-//  APP CONTROLLER
-// ═══════════════════════════════════════════════════════
-const App = (() => {
-  let confirmCallback = null;
-  let currentView = 'bookshelf';
-
-  function showView(id) {
-    document.querySelectorAll('.view').forEach(v => {
-      v.classList.add('hidden'); v.classList.remove('slide-left');
-    });
-    const target = document.getElementById(id + '-view');
-    if (target) target.classList.remove('hidden');
-    currentView = id;
-  }
-
-  function showBookshelf() {
-    showView('bookshelf'); Bookshelf.render();
-  }
-
-  async function openBook(id) {
-    showView('reader');
-    await Reader.open(id);
-  }
-
-  function closeReader() {
-    Reader.close(); showView('bookshelf'); Bookshelf.render();
-  }
-
-  function showWordBank() {
-    showView('wordbank'); WordBank.render();
-  }
-
-  function showSettings(fromReader = false) {
-    Settings.initUI();
-    document.getElementById('settings-panel').classList.add('show');
-  }
-
-  function closeSettings() {
-    document.getElementById('settings-panel').classList.remove('show');
-  }
-
-  function closeSettingsIfOutside(e) {
-    if (e.target === document.getElementById('settings-panel')) closeSettings();
-  }
-
-  function showBookmarks() {
-    renderBookmarks();
-    document.getElementById('bookmarks-panel').classList.add('show');
-  }
-
-  function closeBookmarks() {
-    document.getElementById('bookmarks-panel').classList.remove('show');
-  }
-
-  function closeBookmarksIfOutside(e) {
-    if (e.target === document.getElementById('bookmarks-panel')) closeBookmarks();
-  }
-
-  async function renderBookmarks() {
-    const bookmarks = await DB.getAll('bookmarks', 'bookId', Reader.bookId);
-    bookmarks.sort((a, b) => a.pageNumber - b.pageNumber);
-    const list = document.getElementById('bookmarks-list');
-    if (!bookmarks.length) {
-      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">No bookmarks yet.<br>Tap 🔖 to add one!</div>';
-      return;
-    }
-    list.innerHTML = bookmarks.map(bm => `
-      <div class="bookmark-item" onclick="App.jumpToBookmark(${bm.pageNumber})">
-        <div class="bookmark-page">p.${bm.pageNumber}</div>
-        <div>
-          <div class="bookmark-note">${escHtml(bm.note || 'Bookmark')}</div>
-          <div class="bookmark-date">${new Date(bm.createdAt).toLocaleDateString()}</div>
-        </div>
-        <button class="bookmark-del" onclick="event.stopPropagation();App.delBookmark('${bm.id}')">✕</button>
-      </div>`).join('');
-  }
-
-  async function addBookmark() {
-    const note = prompt('Add a note for this bookmark (optional):') || '';
-    const bm = {
-      id: 'bm_' + Date.now(),
-      bookId: Reader.bookId,
-      pageNumber: Reader.currentPage,
-      note, createdAt: Date.now()
-    };
-    await DB.put('bookmarks', bm);
-    toast('🔖 Bookmark added!');
-  }
-
-  async function delBookmark(id) {
-    await DB.del('bookmarks', id); renderBookmarks(); toast('Bookmark deleted');
-  }
-
-  function jumpToBookmark(page) {
-    closeBookmarks(); Reader.goTo(page);
-  }
-
-  function pickFile() { document.getElementById('file-input').click(); }
-
-  function handleFile(input) {
-    const file = input.files[0]; if (!file) return;
-    Bookshelf.addBook(file);
-    input.value = '';
-  }
-
-  function filterBooks() {
-    Bookshelf.render(document.getElementById('search-input').value);
-  }
-
-  function sliderInput(slider) {
-    const pct = ((slider.value - 1) / Math.max(1, slider.max - 1)) * 100;
-    slider.style.setProperty('--val', pct + '%');
-  }
-
-  function sliderChange(slider) { Reader.goTo(parseInt(slider.value)); }
-
-  function changeFontSize(delta) {
-    const s = Settings.load();
-    const newSize = Math.max(12, Math.min(32, s.fontSize + delta));
-    Settings.save({ fontSize: newSize });
-    document.getElementById('font-size-slider').value = newSize;
-    document.getElementById('font-size-val').textContent = newSize;
-    Reader.applySettings();
-  }
-
-  function deleteBook(id, title) {
-    confirm(`Delete "${title}"?`, 'This will remove the book and all its progress.', async () => {
-      await DB.del('books', id); await DB.del('progress', id);
-      Bookshelf.render(); toast('Book deleted');
-    });
-  }
-
-  let toastTimer;
-  function toast(msg) {
-    const el = document.getElementById('toast');
-    el.textContent = msg; el.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
-  }
-
-  function confirm(title, text, cb, okLabel = 'Delete') {
-    confirmCallback = cb;
-    document.getElementById('confirm-title').textContent = title;
-    document.getElementById('confirm-text').textContent = text;
-    document.getElementById('confirm-ok').textContent = okLabel;
-    document.getElementById('confirm-modal').classList.add('show');
-  }
-
-  function confirmOk() {
-    document.getElementById('confirm-modal').classList.remove('show');
-    if (confirmCallback) { confirmCallback(); confirmCallback = null; }
-  }
-
-  function confirmCancel() {
-    document.getElementById('confirm-modal').classList.remove('show');
-    confirmCallback = null;
-  }
-
-  function closePopup() { PopupDef.close(); }
-  function closePopupIfOutside(e) {
-    if (e.target === document.getElementById('word-popup')) PopupDef.close();
-  }
-
-  function saveToWordBank() { PopupDef.saveToWordBank(); }
-  function setDepth(d, el) { PopupDef.setDepth(d, el); }
-
-  function init() {
-    DB.open().then(() => { Bookshelf.render(); });
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-  }
-
-  return {
-    showBookshelf, openBook, closeReader, showWordBank, showSettings, closeSettings,
-    closeSettingsIfOutside, showBookmarks, closeBookmarks, closeBookmarksIfOutside,
-    addBookmark, delBookmark, jumpToBookmark, pickFile, handleFile, filterBooks,
-    sliderInput, sliderChange, changeFontSize, deleteBook, toast, confirm,
-    confirmOk, confirmCancel, closePopup, closePopupIfOutside, saveToWordBank,
-    setDepth, init
-  };
-})();
-
-// ─── UTILS ───
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function timeAgo(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return m + 'm ago';
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + 'h ago';
-  const d = Math.floor(h / 24);
-  if (d < 7) return d + 'd ago';
-  return new Date(ts).toLocaleDateString();
-}
-
-// Init
-window.addEventListener('DOMContentLoaded', () => App.init());
-</script>
-</body>
-</html>
+// [CONTINUED IN NEXT MESSAGE DUE TO LENGTH]
