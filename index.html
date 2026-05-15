@@ -1,989 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-<meta name="theme-color" content="#1a1a2e">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="EbookReader">
-<title>Smart Ebook Reader - All Formats</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<style>
-:root {
-  --bg: #0f0f1a;
-  --surface: #1a1a2e;
-  --surface2: #242438;
-  --surface3: #2e2e4a;
-  --accent: #e8a045;
-  --accent2: #c8703a;
-  --text: #e8e4d9;
-  --text-muted: #8a8698;
-  --text-faint: #4a4860;
-  --border: #2e2e4a;
-  --danger: #e05555;
-  --success: #55c96e;
-  --reader-bg: #faf7f0;
-  --reader-text: #2c2416;
-  --reader-accent: #8b4513;
-  --radius: 12px;
-  --radius-lg: 20px;
-  --shadow: 0 8px 32px rgba(0,0,0,0.4);
-  --shadow-lg: 0 20px 60px rgba(0,0,0,0.6);
-  --font-display: 'Playfair Display', serif;
-  --font-body: 'Lora', serif;
-  --font-mono: 'DM Mono', monospace;
-  --transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
-}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html, body {
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  -webkit-tap-highlight-color: transparent;
-  -webkit-font-smoothing: antialiased;
-}
-
-#app { width: 100%; height: 100%; position: relative; overflow: hidden; }
-
-/* ─── VIEWS ─── */
-.view {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column;
-  transition: transform 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease;
-}
-.view.hidden { transform: translateX(100%); opacity: 0; pointer-events: none; }
-
-/* ─── BOOKSHELF ─── */
-#bookshelf-view { background: var(--bg); overflow: hidden; }
-
-.shelf-header {
-  padding: 20px 20px 0;
-  background: linear-gradient(180deg, var(--bg) 60%, transparent);
-  position: relative; z-index: 2; flex-shrink: 0;
-}
-
-.shelf-header-top {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
-}
-
-.app-logo {
-  display: flex; align-items: center; gap: 10px;
-}
-.app-logo-icon {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; box-shadow: 0 4px 12px rgba(232,160,69,0.3);
-}
-.app-logo-text {
-  font-family: var(--font-display);
-  font-size: 20px; font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #f0c060);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-
-.header-actions { display: flex; gap: 8px; }
-
-.icon-btn {
-  width: 40px; height: 40px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 10px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 18px; color: var(--text);
-  transition: var(--transition); flex-shrink: 0;
-}
-.icon-btn:hover { background: var(--surface3); border-color: var(--accent); color: var(--accent); }
-.icon-btn:active { transform: scale(0.93); }
-
-.search-bar {
-  position: relative; margin-bottom: 16px;
-}
-.search-bar input {
-  width: 100%; padding: 12px 16px 12px 44px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); font-size: 15px;
-  font-family: var(--font-body); outline: none; transition: var(--transition);
-}
-.search-bar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232,160,69,0.15); }
-.search-bar input::placeholder { color: var(--text-faint); }
-.search-icon {
-  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-  color: var(--text-muted); font-size: 16px; pointer-events: none;
-}
-
-.shelf-stats {
-  display: flex; gap: 16px; margin-bottom: 12px; flex-shrink: 0; padding: 0 20px;
-}
-.stat-chip {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 20px; padding: 5px 12px;
-  font-size: 13px; color: var(--text-muted); font-family: var(--font-mono);
-}
-.stat-chip span { color: var(--accent); font-weight: 500; }
-
-.books-scroll {
-  flex: 1; overflow-y: auto; padding: 8px 20px 100px;
-  overscroll-behavior: contain;
-}
-.books-scroll::-webkit-scrollbar { display: none; }
-
-.books-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 16px;
-}
-
-@media (min-width: 768px) {
-  .books-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
-}
-
-.book-card {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); overflow: hidden; cursor: pointer;
-  transition: var(--transition); position: relative;
-  animation: fadeInUp 0.4s ease both;
-}
-.book-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--accent); }
-.book-card:active { transform: scale(0.97); }
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.book-cover {
-  width: 100%; aspect-ratio: 3/4; position: relative; overflow: hidden;
-  background: var(--surface3);
-}
-.book-cover canvas, .book-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cover-placeholder {
-  width: 100%; height: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--surface3), var(--surface));
-  padding: 16px;
-}
-.cover-letter {
-  font-family: var(--font-display); font-size: 52px; font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #f0c060);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  line-height: 1; margin-bottom: 8px;
-}
-.cover-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; }
-.format-badge {
-  position: absolute; top: 8px; left: 8px;
-  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
-  padding: 3px 8px; border-radius: 12px;
-  font-size: 10px; font-weight: 600; color: var(--accent);
-  font-family: var(--font-mono);
-  z-index: 3;
-}
-
-.book-progress-bar {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
-  background: rgba(255,255,255,0.1);
-}
-.book-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent), #f0c060);
-  transition: width 0.5s ease;
-}
-
-.delete-btn {
-  position: absolute; top: 8px; right: 8px;
-  width: 28px; height: 28px; border-radius: 50%;
-  background: rgba(0,0,0,0.6); border: none; color: #fff;
-  font-size: 13px; cursor: pointer; display: none; align-items: center; justify-content: center;
-  transition: var(--transition); z-index: 5;
-  backdrop-filter: blur(4px);
-}
-.book-card:hover .delete-btn { display: flex; }
-.delete-btn:hover { background: var(--danger); }
-
-.book-info { padding: 10px 12px 12px; }
-.book-title {
-  font-size: 13px; font-weight: 600; color: var(--text);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden; line-height: 1.4; margin-bottom: 4px;
-}
-.book-author { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
-.book-meta { font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); }
-
-.empty-state {
-  flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; padding: 40px;
-  text-align: center; gap: 16px;
-}
-.empty-icon { font-size: 64px; opacity: 0.4; }
-.empty-title { font-family: var(--font-display); font-size: 22px; color: var(--text-muted); }
-.empty-sub { font-size: 14px; color: var(--text-faint); line-height: 1.6; }
-.format-list {
-  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 16px 0;
-}
-.format-tag {
-  background: var(--surface2); padding: 4px 12px; border-radius: 20px;
-  font-size: 12px; font-family: var(--font-mono); color: var(--text-muted);
-}
-.empty-btn {
-  margin-top: 8px; padding: 14px 28px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border: none; border-radius: 50px; color: #fff;
-  font-size: 15px; font-weight: 600; cursor: pointer;
-  box-shadow: 0 4px 20px rgba(232,160,69,0.4);
-  transition: var(--transition); font-family: var(--font-body);
-}
-.empty-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(232,160,69,0.5); }
-
-.fab {
-  position: fixed; bottom: 28px; right: 20px;
-  width: 56px; height: 56px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border: none; border-radius: 50%; color: #fff; font-size: 24px;
-  cursor: pointer; box-shadow: 0 6px 24px rgba(232,160,69,0.45);
-  display: flex; align-items: center; justify-content: center;
-  transition: var(--transition); z-index: 50;
-}
-.fab:hover { transform: scale(1.1) rotate(90deg); }
-.fab:active { transform: scale(0.95); }
-
-/* ─── READER ─── */
-#reader-view {
-  background: #1a1612;
-  flex-direction: column; user-select: none;
-  overflow: hidden;
-}
-
-.reader-bar {
-  position: absolute; left: 0; right: 0; z-index: 100;
-  transition: transform 0.3s ease, opacity 0.3s ease;
-  backdrop-filter: blur(12px) saturate(1.5);
-  -webkit-backdrop-filter: blur(12px) saturate(1.5);
-}
-.reader-bar.hidden { pointer-events: none; }
-
-#reader-top-bar {
-  top: 0;
-  background: rgba(15,15,26,0.92);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  padding: 12px 16px;
-  display: flex; align-items: center; gap: 12px;
-  padding-top: max(12px, env(safe-area-inset-top));
-}
-#reader-top-bar.hidden { transform: translateY(-100%); opacity: 0; }
-
-#reader-bottom-bar {
-  bottom: 0;
-  background: rgba(15,15,26,0.92);
-  border-top: 1px solid rgba(255,255,255,0.08);
-  padding: 12px 16px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
-  display: flex; flex-direction: column; gap: 10px;
-}
-#reader-bottom-bar.hidden { transform: translateY(100%); opacity: 0; }
-
-.reader-title {
-  flex: 1; text-align: center;
-  font-family: var(--font-display); font-size: 15px;
-  color: var(--text); overflow: hidden;
-  white-space: nowrap; text-overflow: ellipsis;
-}
-
-.bottom-bar-row { display: flex; align-items: center; gap: 12px; }
-
-.page-info {
-  font-family: var(--font-mono); font-size: 12px;
-  color: var(--text-muted); white-space: nowrap; flex-shrink: 0;
-}
-
-.progress-slider {
-  flex: 1; -webkit-appearance: none; appearance: none;
-  height: 4px; border-radius: 2px; outline: none; cursor: pointer;
-  background: linear-gradient(90deg, var(--accent) var(--val, 0%), var(--surface3) var(--val, 0%));
-}
-.progress-slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 16px; height: 16px;
-  border-radius: 50%; background: var(--accent);
-  box-shadow: 0 2px 8px rgba(232,160,69,0.5); cursor: pointer;
-}
-
-.font-btns { display: flex; gap: 4px; }
-.font-btn {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); cursor: pointer;
-  padding: 4px 10px; font-size: 13px; transition: var(--transition);
-}
-.font-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-.reader-content {
-  flex: 1;
-  position: relative;
-  overflow: auto;
-  padding: 20px;
-  -webkit-overflow-scrolling: touch;
-}
-
-#epub-viewer, #txt-viewer {
-  max-width: 800px;
-  margin: 0 auto;
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--r-text, #2c2416);
-  background: var(--r-bg, #faf7f0);
-  padding: 40px 20px;
-  min-height: 100%;
-}
-
-#txt-viewer {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-#pdf-canvas {
-  display: block;
-  max-width: 100%;
-  margin: 0 auto;
-  box-shadow: var(--shadow-lg);
-}
-
-.page-nav-zone {
-  position: absolute; top: 0; bottom: 0; width: 20%;
-  z-index: 10; cursor: pointer;
-}
-#page-prev-zone { left: 0; }
-#page-next-zone { right: 0; }
-
-.page-loading {
-  position: absolute; inset: 0;
-  display: none; flex-direction: column;
-  align-items: center; justify-content: center; gap: 16px;
-  background: var(--bg);
-  z-index: 50;
-}
-.page-loading.show { display: flex; }
-.spinner {
-  width: 40px; height: 40px; border: 3px solid var(--border);
-  border-top-color: var(--accent); border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ─── WORD POPUP ─── */
-#word-popup {
-  position: fixed; inset: 0; z-index: 1000;
-  display: none; align-items: flex-end;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease;
-}
-#word-popup.show { display: flex; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-.popup-sheet {
-  width: 100%; max-width: 600px; margin: 0 auto;
-  background: var(--surface);
-  border-radius: 24px 24px 0 0;
-  border-top: 1px solid var(--border);
-  padding: 0 0 max(24px, env(safe-area-inset-bottom));
-  animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
-  max-height: 85vh; overflow-y: auto;
-  box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
-}
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-
-.popup-handle {
-  width: 40px; height: 4px; background: var(--border);
-  border-radius: 2px; margin: 12px auto 0;
-}
-
-.popup-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px 0;
-}
-
-.popup-word {
-  font-family: var(--font-display); font-size: 26px; font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #f0c060);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-
-.popup-actions { display: flex; gap: 8px; }
-.popup-close {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 50%; width: 32px; height: 32px;
-  color: var(--text-muted); font-size: 14px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: var(--transition);
-}
-.popup-close:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-
-.popup-save-btn {
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border: none; border-radius: 20px; padding: 6px 14px;
-  color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: var(--transition); font-family: var(--font-body);
-}
-.popup-save-btn:hover { transform: scale(1.05); }
-.popup-save-btn.saved { background: var(--success); }
-
-.popup-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
-
-.context-box, .definition-box, .example-box {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px 16px;
-}
-.box-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
-  color: var(--text-muted); margin-bottom: 8px; font-family: var(--font-mono);
-  display: flex; align-items: center; gap: 6px;
-}
-.box-content { font-size: 15px; line-height: 1.6; color: var(--text); }
-.box-content strong { color: var(--accent); }
-
-.popup-loading {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 12px; padding: 30px 20px; text-align: center;
-}
-.loading-text { color: var(--text-muted); font-size: 15px; }
-
-.depth-toggle {
-  display: flex; gap: 8px; padding: 0 20px 8px;
-}
-.depth-btn {
-  flex: 1; padding: 8px; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text-muted); font-size: 13px; cursor: pointer;
-  transition: var(--transition); font-family: var(--font-body);
-}
-.depth-btn.active {
-  background: rgba(232,160,69,0.15);
-  border-color: var(--accent); color: var(--accent);
-}
-
-.popup-error {
-  padding: 20px; text-align: center;
-  color: var(--text-muted); font-size: 14px; line-height: 1.6;
-}
-
-/* ─── SETTINGS PANEL ─── */
-#settings-panel {
-  position: fixed; inset: 0; z-index: 500;
-  display: none; align-items: flex-end;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(4px);
-}
-#settings-panel.show { display: flex; }
-
-.settings-sheet {
-  width: 100%; max-width: 600px; margin: 0 auto;
-  background: var(--surface);
-  border-radius: 24px 24px 0 0;
-  border-top: 1px solid var(--border);
-  max-height: 85vh; overflow-y: auto;
-  animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
-  box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
-  padding-bottom: max(24px, env(safe-area-inset-bottom));
-}
-.settings-sheet::-webkit-scrollbar { display: none; }
-
-.settings-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; background: var(--surface); z-index: 1;
-}
-.settings-title { font-family: var(--font-display); font-size: 20px; }
-
-.settings-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 24px; }
-
-.settings-section {}
-.settings-section-title {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: var(--text-muted); margin-bottom: 12px; font-family: var(--font-mono);
-}
-
-.setting-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 0; border-bottom: 1px solid var(--border);
-}
-.setting-row:last-child { border-bottom: none; }
-.setting-label { font-size: 15px; color: var(--text); }
-.setting-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-
-.setting-input {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text); padding: 8px 12px;
-  font-size: 14px; width: 100%; margin-top: 8px; outline: none;
-  font-family: var(--font-mono); transition: var(--transition);
-}
-.setting-input:focus { border-color: var(--accent); }
-
-.setting-select {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text); padding: 8px 12px;
-  font-size: 14px; outline: none; cursor: pointer;
-}
-
-.theme-picker { display: flex; gap: 8px; flex-wrap: wrap; }
-.theme-swatch {
-  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
-  border: 2px solid transparent; transition: var(--transition);
-  flex-shrink: 0;
-}
-.theme-swatch.active { border-color: var(--accent); transform: scale(1.15); }
-.theme-swatch[data-theme="light"] { background: #ffffff; }
-.theme-swatch[data-theme="sepia"] { background: #f4ecd8; }
-.theme-swatch[data-theme="dark"] { background: #1a1a2e; }
-.theme-swatch[data-theme="night"] { background: #0d0d0d; }
-
-.font-family-picker { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.font-option {
-  padding: 10px 14px; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: 8px;
-  cursor: pointer; transition: var(--transition); font-size: 14px; color: var(--text);
-}
-.font-option.active { border-color: var(--accent); color: var(--accent); background: rgba(232,160,69,0.1); }
-
-.slider-row { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); }
-input[type="range"] {
-  width: 100%; -webkit-appearance: none; appearance: none;
-  height: 4px; background: var(--surface3); border-radius: 2px; outline: none; cursor: pointer;
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 18px; height: 18px;
-  border-radius: 50%; background: var(--accent);
-  box-shadow: 0 2px 6px rgba(232,160,69,0.4);
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border: none; border-radius: 10px; color: #fff; padding: 12px 20px;
-  font-size: 15px; font-weight: 600; cursor: pointer; width: 100%;
-  transition: var(--transition); font-family: var(--font-body);
-}
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(232,160,69,0.4); }
-
-.btn-secondary {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 10px; color: var(--text); padding: 12px 20px;
-  font-size: 15px; cursor: pointer; width: 100%;
-  transition: var(--transition); font-family: var(--font-body);
-}
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-
-.btn-danger {
-  background: rgba(224,85,85,0.1); border: 1px solid var(--danger);
-  border-radius: 10px; color: var(--danger); padding: 12px 20px;
-  font-size: 15px; cursor: pointer; width: 100%;
-  transition: var(--transition); font-family: var(--font-body);
-}
-
-.test-api-result { font-size: 13px; margin-top: 8px; padding: 8px 12px; border-radius: 8px; }
-.test-api-result.success { background: rgba(85,201,110,0.1); color: var(--success); }
-.test-api-result.error { background: rgba(224,85,85,0.1); color: var(--danger); }
-
-/* ─── BOOKMARKS ─── */
-#bookmarks-panel {
-  position: fixed; inset: 0; z-index: 500;
-  display: none; align-items: flex-end;
-  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
-}
-#bookmarks-panel.show { display: flex; }
-
-.bookmark-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer;
-}
-.bookmark-item:hover { opacity: 0.8; }
-.bookmark-page {
-  background: rgba(232,160,69,0.15); border: 1px solid var(--accent);
-  border-radius: 6px; padding: 3px 10px;
-  font-family: var(--font-mono); font-size: 13px; color: var(--accent);
-  flex-shrink: 0; margin-right: 12px;
-}
-.bookmark-note { flex: 1; font-size: 14px; color: var(--text); }
-.bookmark-date { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-.bookmark-del {
-  background: none; border: none; color: var(--text-faint);
-  font-size: 16px; cursor: pointer; padding: 4px 8px;
-  transition: var(--transition); flex-shrink: 0;
-}
-.bookmark-del:hover { color: var(--danger); }
-
-/* ─── WORD BANK VIEW ─── */
-#wordbank-view { background: var(--bg); overflow: hidden; }
-
-.wordbank-header {
-  padding: 20px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface); flex-shrink: 0;
-}
-.wordbank-title { font-family: var(--font-display); font-size: 20px; flex: 1; }
-
-.wordbank-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
-.wordbank-body::-webkit-scrollbar { display: none; }
-
-.word-entry {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
-  animation: fadeInUp 0.3s ease both;
-}
-.word-entry-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
-.word-entry-word {
-  font-family: var(--font-display); font-size: 20px; font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #f0c060);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.word-entry-meta { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); text-align: right; }
-.word-entry-context { font-size: 13px; color: var(--text-muted); font-style: italic; margin-bottom: 8px; line-height: 1.5; }
-.word-entry-def { font-size: 14px; color: var(--text); line-height: 1.6; }
-.word-del-btn {
-  background: none; border: none; color: var(--text-faint); cursor: pointer;
-  font-size: 16px; margin-top: 4px; transition: var(--transition); flex-shrink: 0;
-}
-.word-del-btn:hover { color: var(--danger); }
-
-.wordbank-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.filter-chip {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 20px; padding: 6px 14px;
-  font-size: 13px; color: var(--text-muted); cursor: pointer;
-  transition: var(--transition);
-}
-.filter-chip.active { background: rgba(232,160,69,0.15); border-color: var(--accent); color: var(--accent); }
-
-.wordbank-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
-.wordbank-empty .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
-
-/* ─── TOAST ─── */
-#toast {
-  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 30px; padding: 10px 20px;
-  font-size: 14px; color: var(--text); z-index: 2000;
-  opacity: 0; transition: all 0.3s ease; pointer-events: none;
-  box-shadow: var(--shadow); backdrop-filter: blur(8px);
-  white-space: nowrap;
-}
-#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-/* ─── CONFIRM MODAL ─── */
-#confirm-modal {
-  position: fixed; inset: 0; z-index: 3000;
-  display: none; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
-  padding: 20px;
-}
-#confirm-modal.show { display: flex; }
-.confirm-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 28px;
-  max-width: 360px; width: 100%;
-  animation: zoomIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
-}
-@keyframes zoomIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.confirm-title { font-family: var(--font-display); font-size: 18px; margin-bottom: 12px; }
-.confirm-text { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
-.confirm-btns { display: flex; gap: 10px; }
-.confirm-btns button { flex: 1; }
-
-/* ─── IMPORT OVERLAY ─── */
-#import-overlay {
-  position: fixed; inset: 0; z-index: 3000;
-  display: none; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.8); flex-direction: column; gap: 16px;
-}
-#import-overlay.show { display: flex; }
-.import-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 32px; text-align: center;
-  max-width: 320px; width: 90%;
-}
-.import-title { font-family: var(--font-display); font-size: 18px; margin-bottom: 8px; }
-.import-sub { font-size: 13px; color: var(--text-muted); }
-
-/* ─── LONG-PRESS INDICATOR ─── */
-.long-press-indicator {
-  position: absolute; pointer-events: none; z-index: 5;
-  background: rgba(232,160,69,0.2); border-radius: 4px;
-  border: 1px solid rgba(232,160,69,0.4);
-  animation: pulse 0.5s ease;
-}
-@keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
-
-/* ─── MOBILE BOTTOM NAV ─── */
-.bottom-nav {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  background: rgba(15,15,26,0.95); border-top: 1px solid var(--border);
-  display: flex; justify-content: space-around; align-items: center;
-  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
-  z-index: 40; backdrop-filter: blur(12px);
-}
-.nav-item {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 4px; padding: 6px 20px; cursor: pointer;
-  color: var(--text-faint); transition: var(--transition); border-radius: 12px;
-}
-.nav-item.active { color: var(--accent); }
-.nav-item:hover { color: var(--text); }
-.nav-icon { font-size: 20px; }
-.nav-label { font-size: 10px; font-family: var(--font-mono); }
-
-@media (min-width: 768px) {
-  .bottom-nav { display: none; }
-  .books-scroll { padding-bottom: 40px; }
-  .popup-sheet { border-radius: 16px; margin: auto; }
-  #word-popup { align-items: center; }
-  .fab { bottom: 32px; right: 32px; }
-}
-</style>
-</head>
-<body>
-<div id="app">
-
-  <!-- BOOKSHELF VIEW -->
-  <div id="bookshelf-view" class="view">
-    <div class="shelf-header">
-      <div class="shelf-header-top">
-        <div class="app-logo">
-          <div class="app-logo-icon">📚</div>
-          <div class="app-logo-text">Librarium</div>
-        </div>
-        <div class="header-actions">
-          <button class="icon-btn" onclick="App.showWordBank()" title="Word Bank">🔤</button>
-          <button class="icon-btn" onclick="App.showSettings()" title="Settings">⚙️</button>
-        </div>
-      </div>
-      <div class="search-bar">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="search-input" placeholder="Search your library..." oninput="App.filterBooks()">
-      </div>
-    </div>
-    <div id="shelf-stats" class="shelf-stats" style="display:none">
-      <div class="stat-chip"><span id="stat-books">0</span> books</div>
-      <div class="stat-chip"><span id="stat-reading">0</span> reading</div>
-    </div>
-    <div class="books-scroll" id="books-container">
-      <div class="empty-state" id="empty-state">
-        <div class="empty-icon">📖</div>
-        <div class="empty-title">Your library awaits</div>
-        <div class="empty-sub">Import any ebook format to start reading.<br>Long-press any word to get AI definitions!</div>
-        <div class="format-list">
-          <span class="format-tag">PDF</span>
-          <span class="format-tag">EPUB</span>
-          <span class="format-tag">MOBI</span>
-          <span class="format-tag">AZW</span>
-          <span class="format-tag">FB2</span>
-          <span class="format-tag">TXT</span>
-        </div>
-        <button class="empty-btn" onclick="App.pickFile()">+ Import Book</button>
-      </div>
-      <div class="books-grid" id="books-grid" style="display:none"></div>
-    </div>
-    <button class="fab" onclick="App.pickFile()" title="Import Book">+</button>
-    <div class="bottom-nav" id="shelf-nav">
-      <div class="nav-item active" onclick="App.showBookshelf()">
-        <div class="nav-icon">🏠</div><div class="nav-label">Library</div>
-      </div>
-      <div class="nav-item" onclick="App.showWordBank()">
-        <div class="nav-icon">🔤</div><div class="nav-label">Words</div>
-      </div>
-      <div class="nav-item" onclick="App.showSettings()">
-        <div class="nav-icon">⚙️</div><div class="nav-label">Settings</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- READER VIEW -->
-  <div id="reader-view" class="view hidden">
-    <div id="reader-top-bar" class="reader-bar">
-      <button class="icon-btn" id="reader-back-btn" onclick="App.closeReader()">←</button>
-      <div class="reader-title" id="reader-title">Loading…</div>
-      <button class="icon-btn" onclick="App.addBookmark()">🔖</button>
-      <button class="icon-btn" onclick="App.showBookmarks()">📑</button>
-      <button class="icon-btn" onclick="App.showSettings(true)">⚙️</button>
-    </div>
-    <div class="reader-content" id="reader-content">
-      <canvas id="pdf-canvas" style="display:none"></canvas>
-      <div id="epub-viewer" style="display:none"></div>
-      <div id="txt-viewer" style="display:none"></div>
-      <div class="page-nav-zone" id="page-prev-zone"></div>
-      <div class="page-nav-zone" id="page-next-zone"></div>
-    </div>
-    <div id="reader-bottom-bar" class="reader-bar">
-      <div class="bottom-bar-row">
-        <span class="page-info" id="page-counter">Page 1 of 1</span>
-        <input type="range" id="progress-slider" class="progress-slider" min="1" value="1" oninput="App.sliderInput(this)" onchange="App.sliderChange(this)" style="--val:0%">
-        <div class="font-btns">
-          <button class="font-btn" onclick="App.changeFontSize(-2)">A-</button>
-          <button class="font-btn" onclick="App.changeFontSize(2)">A+</button>
-        </div>
-      </div>
-    </div>
-    <div class="page-loading" id="page-loading">
-      <div class="spinner"></div>
-      <div style="color:var(--text-muted);font-size:14px">Loading content…</div>
-    </div>
-  </div>
-
-  <!-- WORD BANK VIEW -->
-  <div id="wordbank-view" class="view hidden">
-    <div class="wordbank-header">
-      <button class="icon-btn" onclick="App.showBookshelf()">←</button>
-      <div class="wordbank-title">Word Bank</div>
-      <button class="icon-btn" onclick="WordBank.exportCSV()" title="Export">⬇️</button>
-      <button class="icon-btn" onclick="WordBank.clearAll()" title="Clear All">🗑️</button>
-    </div>
-    <div class="wordbank-body">
-      <div class="wordbank-filters" id="wordbank-filters"></div>
-      <div id="wordbank-list"></div>
-    </div>
-  </div>
-
-  <!-- WORD POPUP -->
-  <div id="word-popup" onclick="App.closePopupIfOutside(event)">
-    <div class="popup-sheet" id="popup-sheet">
-      <div class="popup-handle"></div>
-      <div class="popup-header">
-        <div class="popup-word" id="popup-word-text">word</div>
-        <div class="popup-actions">
-          <button class="popup-save-btn" id="popup-save-btn" onclick="App.saveToWordBank()">📚 Save</button>
-          <button class="popup-close" onclick="App.closePopup()">✕</button>
-        </div>
-      </div>
-      <div id="popup-content" class="popup-body"></div>
-      <div class="depth-toggle" id="depth-toggle">
-        <button class="depth-btn active" data-depth="simple" onclick="App.setDepth('simple',this)">Simple</button>
-        <button class="depth-btn" data-depth="normal" onclick="App.setDepth('normal',this)">Normal</button>
-        <button class="depth-btn" data-depth="deep" onclick="App.setDepth('deep',this)">Deep</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- SETTINGS PANEL -->
-  <div id="settings-panel" onclick="App.closeSettingsIfOutside(event)">
-    <div class="settings-sheet">
-      <div class="settings-header">
-        <div class="settings-title">⚙️ Settings</div>
-        <button class="popup-close" onclick="App.closeSettings()">✕</button>
-      </div>
-      <div class="settings-body">
-        <div class="settings-section">
-          <div class="settings-section-title">🤖 Gemini API</div>
-          <input type="password" id="api-key-input" class="setting-input" placeholder="Paste your Gemini API key here…">
-          <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn-primary" style="flex:1" onclick="Settings.saveApiKey()">Save Key</button>
-            <button class="btn-secondary" style="flex:1" onclick="Settings.testApiKey()">Test</button>
-          </div>
-          <div id="api-test-result" class="test-api-result" style="display:none"></div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">🎨 Display</div>
-          <div class="setting-row">
-            <div><div class="setting-label">Theme</div></div>
-            <div class="theme-picker">
-              <div class="theme-swatch active" data-theme="light" onclick="Settings.setTheme('light',this)"></div>
-              <div class="theme-swatch" data-theme="sepia" onclick="Settings.setTheme('sepia',this)"></div>
-              <div class="theme-swatch" data-theme="dark" onclick="Settings.setTheme('dark',this)"></div>
-              <div class="theme-swatch" data-theme="night" onclick="Settings.setTheme('night',this)"></div>
-            </div>
-          </div>
-          <div class="setting-row" style="flex-direction:column;align-items:stretch">
-            <div class="setting-label">Font Family</div>
-            <div class="font-family-picker">
-              <div class="font-option active" data-font="serif" style="font-family:Georgia,serif" onclick="Settings.setFont('serif',this)">Serif (Georgia)</div>
-              <div class="font-option" data-font="sans" style="font-family:Arial,sans-serif" onclick="Settings.setFont('sans',this)">Sans-Serif (Arial)</div>
-              <div class="font-option" data-font="mono" style="font-family:monospace" onclick="Settings.setFont('mono',this)">Monospace</div>
-            </div>
-          </div>
-          <div class="setting-row" style="flex-direction:column;align-items:stretch">
-            <div class="setting-label">Font Size: <span id="font-size-val">18</span>px</div>
-            <div class="slider-row">
-              <input type="range" min="12" max="32" value="18" id="font-size-slider" oninput="Settings.onFontSize(this)">
-            </div>
-          </div>
-          <div class="setting-row" style="flex-direction:column;align-items:stretch">
-            <div class="setting-label">Line Height: <span id="line-height-val">1.5</span></div>
-            <div class="slider-row">
-              <input type="range" min="12" max="20" value="15" id="line-height-slider" oninput="Settings.onLineHeight(this)">
-            </div>
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">💾 Data</div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn-secondary" onclick="Settings.exportData()">📤 Export All Data</button>
-            <button class="btn-danger" onclick="Settings.clearAllData()">🗑️ Clear All Data</button>
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-title">ℹ️ About</div>
-          <div style="font-size:14px;color:var(--text-muted);line-height:1.7">
-            <strong style="color:var(--text)">Librarium</strong> — Universal Ebook Reader v2.0<br>
-            Supports: PDF, EPUB, MOBI, AZW, FB2, TXT<br>
-            Long-press any word to get AI-powered definitions via Gemini API.
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- BOOKMARKS PANEL -->
-  <div id="bookmarks-panel" onclick="App.closeBookmarksIfOutside(event)">
-    <div class="settings-sheet">
-      <div class="settings-header">
-        <div class="settings-title">🔖 Bookmarks</div>
-        <button class="popup-close" onclick="App.closeBookmarks()">✕</button>
-      </div>
-      <div class="settings-body" id="bookmarks-list"></div>
-    </div>
-  </div>
-
-  <!-- MODALS -->
-  <div id="confirm-modal">
-    <div class="confirm-box">
-      <div class="confirm-title" id="confirm-title">Are you sure?</div>
-      <div class="confirm-text" id="confirm-text">This action cannot be undone.</div>
-      <div class="confirm-btns">
-        <button class="btn-secondary" onclick="App.confirmCancel()">Cancel</button>
-        <button class="btn-danger" id="confirm-ok" onclick="App.confirmOk()">Delete</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="import-overlay">
-    <div class="import-box">
-      <div style="font-size:48px;margin-bottom:16px">📥</div>
-      <div class="import-title">Importing Book…</div>
-      <div class="import-sub" id="import-sub">Processing file…</div>
-      <div class="spinner" style="margin:20px auto 0"></div>
-    </div>
-  </div>
-
-  <div id="toast"></div>
-  <input type="file" id="file-input" accept=".pdf,.epub,.mobi,.azw,.azw3,.fb2,.txt" style="display:none" onchange="App.handleFile(this)">
-</div>
-
 <script>
 // ═══════════════════════════════════════════════════════
 //  CONFIGURATION
 // ═══════════════════════════════════════════════════════
-const GEMINI_API_KEY_DEFAULT = 'AIzaSyCX4HC9P6NxO2AFDcmE3F_64VreLtLp0XM';
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 // ═══════════════════════════════════════════════════════
-//  DATABASE
+//  DATABASE ENGINE
 // ═══════════════════════════════════════════════════════
 const DB = (() => {
   let db;
-  const DB_NAME = 'EbookReaderDB', DB_VERSION = 3;
+  const DB_NAME = 'EbookReaderDB', DB_VERSION = 5; // Bumped version to ensure clean index creation
 
   function open() {
     return new Promise((res, rej) => {
@@ -1004,17 +30,14 @@ const DB = (() => {
           const wb = d.createObjectStore('wordBank', { keyPath: 'id' });
           wb.createIndex('bookId', 'bookId');
         }
-        if (!d.objectStoreNames.contains('defCache')) d.createObjectStore('defCache', { keyPath: 'hash' });
       };
       req.onsuccess = e => { db = e.target.result; res(db); };
       req.onerror = () => rej(req.error);
     });
   }
 
-  function tx(store, mode = 'readonly') {
-    return db.transaction(store, mode).objectStore(store);
-  }
-
+  function tx(store, mode = 'readonly') { return db.transaction(store, mode).objectStore(store); }
+  
   function get(store, key) {
     return open().then(() => new Promise((res, rej) => {
       const req = tx(store).get(key);
@@ -1039,32 +62,570 @@ const DB = (() => {
     }));
   }
 
-  function getAll(store, indexName, indexVal) {
+  function getAll(store) {
     return open().then(() => new Promise((res, rej) => {
-      let req;
-      if (indexName) {
-        req = tx(store).index(indexName).getAll(indexVal);
-      } else {
-        req = tx(store).getAll();
-      }
+      const req = tx(store).getAll();
       req.onsuccess = () => res(req.result);
       req.onerror = () => rej(req.error);
     }));
   }
 
-  function clearStore(store) {
-    return open().then(() => new Promise((res, rej) => {
-      const req = tx(store, 'readwrite').clear();
-      req.onsuccess = () => res();
-      req.onerror = () => rej(req.error);
-    }));
-  }
-
-  return { get, put, del, getAll, clearStore, open };
+  return { get, put, del, getAll, open };
 })();
 
 // ═══════════════════════════════════════════════════════
-//  SETTINGS (same as before, omitted for brevity - included in final)
+//  SETTINGS & STATE
 // ═══════════════════════════════════════════════════════
+const Settings = {
+  state: {
+    apiKey: localStorage.getItem('openrouter_api_key') || '',
+    theme: localStorage.getItem('reader_theme') || 'light',
+    fontSize: parseInt(localStorage.getItem('reader_font_size')) || 18,
+    lineHeight: parseFloat(localStorage.getItem('reader_line_height')) || 1.5,
+    fontFamily: localStorage.getItem('reader_font_family') || 'serif'
+  },
 
-// [CONTINUED IN NEXT MESSAGE DUE TO LENGTH]
+  init() {
+    this.applyTheme(this.state.theme);
+    this.applyFontSettings();
+    
+    // Update settings UI
+    document.getElementById('api-key-input').value = this.state.apiKey;
+    document.getElementById('api-key-input').placeholder = "Paste OpenRouter API Key...";
+    document.querySelector('.settings-section-title').textContent = "🤖 OpenRouter / Groq API";
+    
+    document.getElementById('font-size-slider').value = this.state.fontSize;
+    document.getElementById('line-height-slider').value = this.state.lineHeight * 10;
+  },
+
+  saveApiKey() {
+    const key = document.getElementById('api-key-input').value.trim();
+    this.state.apiKey = key;
+    localStorage.setItem('openrouter_api_key', key);
+    App.toast("OpenRouter API Key saved");
+  },
+
+  async testApiKey() {
+    const resultDiv = document.getElementById('api-test-result');
+    resultDiv.style.display = 'block';
+    resultDiv.className = 'test-api-result';
+    resultDiv.textContent = "Testing connection to Groq via OpenRouter...";
+
+    try {
+      await AI.fetchDefinition("book", "Reading a book.", "simple");
+      resultDiv.className = 'test-api-result success';
+      resultDiv.textContent = "✅ Success! API is working.";
+    } catch (e) {
+      resultDiv.className = 'test-api-result error';
+      resultDiv.textContent = "❌ Error: " + e.message;
+    }
+  },
+
+  setTheme(theme, el) {
+    this.state.theme = theme;
+    localStorage.setItem('reader_theme', theme);
+    this.applyTheme(theme);
+    if (el) {
+      document.querySelectorAll('.theme-swatch').forEach(s => s.classList.remove('active'));
+      el.classList.add('active');
+    }
+  },
+
+  applyTheme(theme) {
+    const themes = {
+      light: { bg: '#faf7f0', text: '#2c2416' },
+      sepia: { bg: '#f4ecd8', text: '#5b4636' },
+      dark: { bg: '#1a1a2e', text: '#e8e4d9' },
+      night: { bg: '#0d0d0d', text: '#a0a0a0' }
+    };
+    const t = themes[theme];
+    document.documentElement.style.setProperty('--r-bg', t.bg);
+    document.documentElement.style.setProperty('--r-text', t.text);
+    document.body.setAttribute('data-theme', theme);
+  },
+
+  setFont(font, el) {
+    this.state.fontFamily = font;
+    localStorage.setItem('reader_font_family', font);
+    this.applyFontSettings();
+    document.querySelectorAll('.font-option').forEach(o => o.classList.remove('active'));
+    el.classList.add('active');
+  },
+
+  onFontSize(el) {
+    this.state.fontSize = parseInt(el.value);
+    document.getElementById('font-size-val').textContent = el.value;
+    localStorage.setItem('reader_font_size', el.value);
+    this.applyFontSettings();
+  },
+
+  onLineHeight(el) {
+    const val = el.value / 10;
+    this.state.lineHeight = val;
+    document.getElementById('line-height-val').textContent = val;
+    localStorage.setItem('reader_line_height', val);
+    this.applyFontSettings();
+  },
+
+  applyFontSettings() {
+    const root = document.documentElement;
+    root.style.setProperty('--reader-font-size', this.state.fontSize + 'px');
+    root.style.setProperty('--reader-line-height', this.state.lineHeight);
+    const families = { serif: 'Georgia, serif', sans: 'Arial, sans-serif', mono: 'monospace' };
+    root.style.setProperty('--reader-font-family', families[this.state.fontFamily]);
+    
+    ['txt-viewer', 'epub-viewer'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) {
+        el.style.fontSize = this.state.fontSize + 'px';
+        el.style.lineHeight = this.state.lineHeight;
+        el.style.fontFamily = families[this.state.fontFamily];
+      }
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//  OPENROUTER / GROQ API ENGINE
+// ═══════════════════════════════════════════════════════
+const AI = {
+  async fetchDefinition(word, context, depth) {
+    const key = Settings.state.apiKey;
+    if (!key) throw new Error("API key is missing. Please add it in Settings.");
+
+    const url = "https://openrouter.ai/api/v1/chat/completions";
+    
+    const depthPrompts = {
+      simple: "Provide a 1-sentence simple definition.",
+      normal: "Provide a clear definition and one example sentence.",
+      deep: "Provide etymology, nuanced definition, and two literary examples."
+    };
+
+    const prompt = `Define the word "${word}" as used in this context: "${context}". ${depthPrompts[depth]} 
+    You MUST return your response as a valid JSON object strictly matching this format: {"definition": "your definition here", "example": "your example here"}. 
+    Do not include markdown formatting like \`\`\`json or any conversational text.`;
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'HTTP-Referer': window.location.href, // Required by OpenRouter
+        'X-Title': 'Librarium Ebook Reader', // Required by OpenRouter
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: "groq/llama3-8b-8192", // Using Groq's high-speed Llama 3
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1
+      })
+    });
+
+    if (!resp.ok) {
+      const errorData = await resp.json();
+      throw new Error(errorData.error?.message || "API Request Failed");
+    }
+
+    const data = await resp.json();
+    let text = data.choices[0].message.content.trim();
+    
+    // Cleanup in case the LLM disobeys and wraps in markdown
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error("AI returned malformed data.");
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//  WORD BANK ENGINE
+// ═══════════════════════════════════════════════════════
+const WordBank = {
+  async render() {
+    const words = await DB.getAll('wordBank');
+    const container = document.getElementById('wordbank-list');
+    
+    if (words.length === 0) {
+      container.innerHTML = `<div class="wordbank-empty"><div class="empty-icon">🔤</div><div>Your word bank is empty.<br>Highlight words while reading to save them!</div></div>`;
+      return;
+    }
+
+    container.innerHTML = '';
+    words.reverse().forEach(w => {
+      const el = document.createElement('div');
+      el.className = 'word-entry';
+      el.innerHTML = `
+        <div class="word-entry-header">
+          <div class="word-entry-word">${w.word}</div>
+          <button class="word-del-btn" onclick="WordBank.deleteWord('${w.id}')">🗑️</button>
+        </div>
+        <div class="word-entry-context">"${w.context}"</div>
+        <div class="word-entry-def">${w.definition}</div>
+      `;
+      container.appendChild(el);
+    });
+  },
+
+  async deleteWord(id) {
+    await DB.del('wordBank', id);
+    App.toast("Word removed");
+    this.render();
+  },
+
+  async clearAll() {
+    if(confirm("Are you sure you want to delete all saved words?")) {
+      const words = await DB.getAll('wordBank');
+      for(let w of words) await DB.del('wordBank', w.id);
+      this.render();
+      App.toast("Word bank cleared");
+    }
+  },
+
+  async exportCSV() {
+    const words = await DB.getAll('wordBank');
+    if (words.length === 0) return App.toast("Nothing to export");
+    
+    let csv = "Word,Context,Definition,Example\n";
+    words.forEach(w => {
+      csv += `"${w.word}","${w.context.replace(/"/g, '""')}","${w.definition.replace(/"/g, '""')}","${w.example.replace(/"/g, '""')}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Librarium_WordBank.csv';
+    a.click();
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//  CORE APP LOGIC
+// ═══════════════════════════════════════════════════════
+const App = {
+  currentBook: null,
+  pdfDoc: null,
+  epubBook: null,
+  pageNum: 1,
+  selection: { word: '', context: '', definition: '', example: '', depth: 'simple' },
+  itemToDelete: null,
+
+  async init() {
+    Settings.init();
+    await DB.open(); // Ensure DB is open before loading shelf
+    this.loadBookshelf();
+    this.initSelectionListener();
+  },
+
+  // --- VIEWS & NAVIGATION ---
+  showBookshelf() {
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById('bookshelf-view').classList.remove('hidden');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.nav-item')[0].classList.add('active');
+    this.loadBookshelf();
+  },
+
+  showWordBank() {
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById('wordbank-view').classList.remove('hidden');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.nav-item')[1].classList.add('active');
+    WordBank.render();
+  },
+
+  closeReader() {
+    this.showBookshelf();
+  },
+
+  // --- FILE HANDLING ---
+  pickFile() { document.getElementById('file-input').click(); },
+
+  async handleFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    document.getElementById('import-overlay').classList.add('show');
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const book = {
+        id: 'book_' + Date.now(),
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        format: file.name.split('.').pop().toUpperCase(),
+        data: e.target.result,
+        lastOpened: Date.now()
+      };
+
+      try {
+        await DB.put('books', book);
+        this.loadBookshelf();
+        this.toast("Book imported successfully!");
+      } catch(err) {
+        this.toast("Error saving book. File may be too large.");
+      } finally {
+        document.getElementById('import-overlay').classList.remove('show');
+        input.value = ''; // Reset file input
+      }
+    };
+    
+    // Always read as ArrayBuffer for PDF and EPUB to prevent corruption. TXT can be text.
+    if (file.name.toLowerCase().endsWith('.txt')) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  },
+
+  async loadBookshelf() {
+    const books = await DB.getAll('books');
+    const grid = document.getElementById('books-grid');
+    const empty = document.getElementById('empty-state');
+    const stats = document.getElementById('shelf-stats');
+
+    if (books.length === 0) {
+      grid.style.display = 'none';
+      stats.style.display = 'none';
+      empty.style.display = 'flex';
+      return;
+    }
+
+    empty.style.display = 'none';
+    stats.style.display = 'flex';
+    grid.style.display = 'grid';
+    grid.innerHTML = '';
+    
+    document.getElementById('stat-books').textContent = books.length;
+
+    books.sort((a, b) => b.lastOpened - a.lastOpened).forEach(book => {
+      const card = document.createElement('div');
+      card.className = 'book-card';
+      card.innerHTML = `
+        <div class="book-cover" onclick="App.openBook('${book.id}')">
+          <div class="format-badge">${book.format}</div>
+          <div class="cover-placeholder">
+            <div class="cover-letter">${book.title.charAt(0)}</div>
+            <div class="cover-label">Librarium</div>
+          </div>
+          <button class="delete-btn" onclick="event.stopPropagation(); App.promptDelete('${book.id}')">✕</button>
+        </div>
+        <div class="book-info">
+          <div class="book-title">${book.title}</div>
+          <div class="book-meta">${new Date(book.lastOpened).toLocaleDateString()}</div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  },
+
+  async openBook(id) {
+    const book = await DB.get('books', id);
+    if (!book) return this.toast("Book not found");
+    
+    this.currentBook = book;
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById('reader-view').classList.remove('hidden');
+    document.getElementById('reader-title').textContent = book.title;
+    
+    book.lastOpened = Date.now();
+    await DB.put('books', book);
+
+    // Hide all viewers initially
+    document.getElementById('pdf-canvas').style.display = 'none';
+    document.getElementById('txt-viewer').style.display = 'none';
+    document.getElementById('epub-viewer').style.display = 'none';
+
+    try {
+      if (book.format === 'PDF') await this.renderPDF(book.data);
+      else if (book.format === 'TXT') this.renderTXT(book.data);
+      else if (book.format === 'EPUB') this.renderEPUB(book.data);
+      else this.toast(`Format ${book.format} viewer in development.`);
+    } catch(e) {
+      this.toast("Error rendering book format.");
+      console.error(e);
+    }
+  },
+
+  renderTXT(data) {
+    const viewer = document.getElementById('txt-viewer');
+    viewer.style.display = 'block';
+    viewer.textContent = data;
+    document.getElementById('page-counter').textContent = "Text View";
+  },
+
+  async renderPDF(data) {
+    document.getElementById('page-loading').classList.add('show');
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(data) });
+    this.pdfDoc = await loadingTask.promise;
+    this.pageNum = 1;
+    await this.renderPDFPage(this.pageNum);
+    document.getElementById('page-loading').classList.remove('show');
+  },
+
+  async renderPDFPage(num) {
+    const page = await this.pdfDoc.getPage(num);
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    const viewport = page.getViewport({ scale: 1.5 });
+    
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    canvas.style.display = 'block';
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    
+    document.getElementById('page-counter').textContent = `Page ${num} of ${this.pdfDoc.numPages}`;
+    document.getElementById('progress-slider').max = this.pdfDoc.numPages;
+    document.getElementById('progress-slider').value = num;
+  },
+
+  renderEPUB(data) {
+    const viewer = document.getElementById('epub-viewer');
+    viewer.style.display = 'block';
+    viewer.innerHTML = ''; // Clear previous
+    this.epubBook = ePub(data);
+    const rendition = this.epubBook.renderTo("epub-viewer", { width: "100%", height: "100%" });
+    rendition.display();
+    document.getElementById('page-counter').textContent = "EPUB View";
+  },
+
+  // --- SELECTION & AI POPUP ---
+  initSelectionListener() {
+    document.getElementById('reader-content').addEventListener('mouseup', () => {
+      setTimeout(() => this.checkSelection(), 100);
+    });
+    document.getElementById('reader-content').addEventListener('touchend', () => {
+      setTimeout(() => this.checkSelection(), 300);
+    });
+  },
+
+  checkSelection() {
+    const sel = window.getSelection();
+    const text = sel.toString().trim();
+    // Only trigger on single words (no spaces) under 30 chars
+    if (text && text.length > 1 && text.length < 30 && !text.includes(' ')) {
+      // Attempt to grab surrounding context safely
+      let context = "Context unavailable";
+      if(sel.anchorNode && sel.anchorNode.textContent) {
+         const fullStr = sel.anchorNode.textContent;
+         const start = Math.max(0, fullStr.indexOf(text) - 40);
+         const end = Math.min(fullStr.length, fullStr.indexOf(text) + text.length + 40);
+         context = fullStr.substring(start, end).trim() + "...";
+      }
+      this.showPopup(text.replace(/[^\w\s-]/gi, ''), context);
+    }
+  },
+
+  async showPopup(word, context) {
+    this.selection.word = word;
+    this.selection.context = context;
+    
+    document.getElementById('popup-word-text').textContent = word;
+    document.getElementById('word-popup').classList.add('show');
+    document.getElementById('popup-content').innerHTML = `
+      <div class="popup-loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Asking Groq / OpenRouter...</div>
+      </div>`;
+    
+    const saveBtn = document.getElementById('popup-save-btn');
+    saveBtn.className = 'popup-save-btn';
+    saveBtn.textContent = '📚 Save';
+    
+    this.fetchDefinitionForPopup();
+  },
+
+  setDepth(depth, el) {
+    this.selection.depth = depth;
+    document.querySelectorAll('.depth-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    this.fetchDefinitionForPopup();
+  },
+
+  async fetchDefinitionForPopup() {
+    try {
+      const res = await AI.fetchDefinition(this.selection.word, this.selection.context, this.selection.depth);
+      this.selection.definition = res.definition;
+      this.selection.example = res.example;
+      
+      document.getElementById('popup-content').innerHTML = `
+        <div class="definition-box">
+          <div class="box-label">Definition</div>
+          <div class="box-content">${res.definition}</div>
+        </div>
+        <div class="example-box">
+          <div class="box-label">Example</div>
+          <div class="box-content"><em>"${res.example}"</em></div>
+        </div>
+      `;
+    } catch (e) {
+      document.getElementById('popup-content').innerHTML = `
+        <div class="popup-error">
+          Failed to fetch definition.<br><br>
+          <span style="color:var(--danger)">${e.message}</span>
+        </div>`;
+    }
+  },
+
+  async saveToWordBank() {
+    if (!this.selection.definition) return;
+    
+    const wordData = {
+      id: 'word_' + Date.now(),
+      bookId: this.currentBook ? this.currentBook.id : 'unknown',
+      word: this.selection.word,
+      context: this.selection.context,
+      definition: this.selection.definition,
+      example: this.selection.example,
+      timestamp: Date.now()
+    };
+
+    await DB.put('wordBank', wordData);
+    
+    const btn = document.getElementById('popup-save-btn');
+    btn.className = 'popup-save-btn saved';
+    btn.textContent = '✅ Saved';
+    this.toast("Saved to Word Bank");
+  },
+
+  // --- MODALS & SETTINGS ---
+  showSettings() { document.getElementById('settings-panel').classList.add('show'); },
+  closeSettings() { document.getElementById('settings-panel').classList.remove('show'); },
+  closeSettingsIfOutside(e) { if(e.target.id === 'settings-panel') this.closeSettings(); },
+  
+  closePopup() { document.getElementById('word-popup').classList.remove('show'); window.getSelection().removeAllRanges(); },
+  closePopupIfOutside(e) { if(e.target.id === 'word-popup') this.closePopup(); },
+
+  showBookmarks() { document.getElementById('bookmarks-panel').classList.add('show'); },
+  closeBookmarks() { document.getElementById('bookmarks-panel').classList.remove('show'); },
+  closeBookmarksIfOutside(e) { if(e.target.id === 'bookmarks-panel') this.closeBookmarks(); },
+
+  promptDelete(id) {
+    this.itemToDelete = id;
+    document.getElementById('confirm-modal').classList.add('show');
+  },
+  confirmCancel() {
+    this.itemToDelete = null;
+    document.getElementById('confirm-modal').classList.remove('show');
+  },
+  async confirmOk() {
+    if (this.itemToDelete) {
+      await DB.del('books', this.itemToDelete);
+      this.toast("Book deleted");
+      this.loadBookshelf();
+    }
+    this.confirmCancel();
+  },
+
+  toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+};
+
+// Start the app immediately
+App.init();
+</script>
