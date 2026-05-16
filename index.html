@@ -253,15 +253,13 @@ html, body {
 /* ─── READER ─── */
 #reader-view {
   background: #1a1612;
-  flex-direction: column; user-select: none;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .reader-bar {
   position: absolute; left: 0; right: 0; z-index: 100;
   transition: transform 0.3s ease, opacity 0.3s ease;
-  backdrop-filter: blur(12px) saturate(1.5);
-  -webkit-backdrop-filter: blur(12px) saturate(1.5);
 }
 .reader-bar.hidden { pointer-events: none; }
 
@@ -322,7 +320,7 @@ html, body {
   flex: 1;
   position: relative;
   overflow: auto;
-  padding: 20px;
+  padding: 70px 20px 100px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -716,6 +714,25 @@ input[type="range"]::-webkit-slider-thumb {
 }
 @keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
 
+/* Allow text selection in readers */
+#epub-viewer, #txt-viewer {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Highlight tapped word */
+.word-highlight {
+  background: rgba(232,160,69,0.35);
+  border-radius: 3px;
+  outline: 2px solid rgba(232,160,69,0.6);
+}
+
+/* Selection colour */
+#epub-viewer ::selection, #txt-viewer ::selection {
+  background: rgba(232,160,69,0.4);
+  color: inherit;
+}
+
 /* ─── MOBILE BOTTOM NAV ─── */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0;
@@ -837,6 +854,9 @@ input[type="range"]::-webkit-slider-thumb {
           <button class="font-btn" onclick="App.changeFontSize(-2)">A-</button>
           <button class="font-btn" onclick="App.changeFontSize(2)">A+</button>
         </div>
+      </div>
+      <div style="text-align:center;font-size:11px;color:var(--text-faint);font-family:var(--font-mono)">
+        👆 Tap any word for AI definition
       </div>
     </div>
     <div class="page-loading" id="page-loading">
@@ -2133,37 +2153,192 @@ const App = (() => {
     const content = document.getElementById('reader-content');
     removeLongPress();
 
-    function onPointerDown(e) {
-      longPressTimer = setTimeout(() => {
-        const sel = window.getSelection();
-        if (sel && sel.toString().trim()) {
-          const word = sel.toString().trim().replace(/[^a-zA-Z'-]/g, '');
-          if (word) {
-            const range = sel.getRangeAt(0);
-            const rct = range.getBoundingClientRect();
-            currentContext = getTextContext(range);
-            showPopup(word);
-          }
+    let pressTimer = null;
+    let pressX = 0, pressY = 0;
+    let moved = false;
+
+    // ── Tap a word (single tap selects it, fires popup) ──
+    function getWordAtPoint(x, y) {
+      // caretRangeFromPoint / caretPositionFromPoint
+      let range = null;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(x, y);
+      } else if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        if (pos) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.setEnd(pos.offsetNode, pos.offset);
         }
-      }, 600);
+      }
+      if (!range) return null;
+
+      const node = range.startContainer;
+      if (node.nodeType !== Node.TEXT_NODE) return null;
+
+      const text = node.textContent;
+      let start = range.startOffset;
+      let end = range.startOffset;
+
+      // Expand left to word boundary
+      while (start > 0 && /[\w'-]/.test(text[start - 1])) start--;
+      // Expand right to word boundary
+      while (end < text.length && /[\w'-]/.test(text[end])) end++;
+
+      if (start === end) return null;
+
+      const word = text.slice(start, end).replace(/[^a-zA-Z''-]/g, '');
+      if (!word || word.length < 2) return null;
+
+      const wordRange = document.createRange();
+      wordRange.setStart(node, start);
+      wordRange.setEnd(node, end);
+      return { word, range: wordRange };
     }
 
-    function onPointerUp() { clearTimeout(longPressTimer); }
+    function onPointerDown(e) {
+      // Ignore right-click / middle-click
+      if (e.button !== undefined && e.button !== 0) return;
+      pressX = e.clientX;
+      pressY = e.clientY;
+      moved = false;
+
+      pressTimer = setTimeout(() => {
+        if (moved) return;
+        // Long-press: try selection first, then tap-word
+        const sel = window.getSelection();
+        const selText = sel && sel.toString().trim().replace(/[^a-zA-Z''-]/g, '');
+        if (selText && selText.length >= 2) {
+          const range = sel.getRangeAt(0);
+          currentContext = getTextContext(range);
+          showPopup(selText);
+          return;
+        }
+        // No selection — try word at press point
+        const hit = getWordAtPoint(pressX, pressY);
+        if (hit) {
+          // Visually select the word
+          window.getSelection().removeAllRanges();
+          window.getSelection().addRange(hit.range);
+          currentContext = getTextContext(hit.range);
+          showPopup(hit.word);
+        }
+      }, 500);
+    }
+
+    function onPointerMove(e) {
+      const dx = e.clientX - pressX;
+      const dy = e.clientY - pressY;
+      // Allow tiny tremor (< 8px) — cancel only on real scroll/drag
+      if (Math.sqrt(dx * dx + dy * dy) > 8) {
+        moved = true;
+        clearTimeout(pressTimer);
+      }
+    }
+
+    function onPointerUp(e) {
+      clearTimeout(pressTimer);
+      // Single tap — only fire if pointer barely moved
+      const dx = e.clientX - pressX;
+      const dy = e.clientY - pressY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 8 && !moved) {
+        // Give browser a moment to set caret, then check for word
+        setTimeout(() => {
+          // If user already has a selection (double-tap word), use it
+          const sel = window.getSelection();
+          const selText = sel && sel.toString().trim().replace(/[^a-zA-Z''-]/g, '');
+          if (selText && selText.length >= 2) {
+            const range = sel.getRangeAt(0);
+            currentContext = getTextContext(range);
+            showPopup(selText);
+            return;
+          }
+          // Otherwise tap-detect word
+          const hit = getWordAtPoint(pressX, pressY);
+          if (hit) {
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(hit.range);
+            currentContext = getTextContext(hit.range);
+            showPopup(hit.word);
+          }
+        }, 50);
+      }
+    }
+
+    // Touch events for mobile (pointerevents can be unreliable on some mobile browsers)
+    function onTouchStart(e) {
+      const t = e.touches[0];
+      pressX = t.clientX; pressY = t.clientY; moved = false;
+      pressTimer = setTimeout(() => {
+        if (moved) return;
+        const hit = getWordAtPoint(pressX, pressY);
+        if (hit) {
+          window.getSelection().removeAllRanges();
+          window.getSelection().addRange(hit.range);
+          currentContext = getTextContext(hit.range);
+          showPopup(hit.word);
+        }
+      }, 500);
+    }
+
+    function onTouchMove(e) {
+      const t = e.touches[0];
+      const dx = t.clientX - pressX, dy = t.clientY - pressY;
+      if (Math.sqrt(dx * dx + dy * dy) > 8) { moved = true; clearTimeout(pressTimer); }
+    }
+
+    function onTouchEnd(e) {
+      clearTimeout(pressTimer);
+      if (!moved && e.changedTouches.length === 1) {
+        const t = e.changedTouches[0];
+        pressX = t.clientX; pressY = t.clientY;
+        setTimeout(() => {
+          const sel = window.getSelection();
+          const selText = sel && sel.toString().trim().replace(/[^a-zA-Z''-]/g, '');
+          if (selText && selText.length >= 2) {
+            const range = sel.getRangeAt(0);
+            currentContext = getTextContext(range);
+            showPopup(selText);
+            return;
+          }
+          const hit = getWordAtPoint(pressX, pressY);
+          if (hit) {
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(hit.range);
+            currentContext = getTextContext(hit.range);
+            showPopup(hit.word);
+          }
+        }, 50);
+      }
+    }
 
     content._lpDown = onPointerDown;
+    content._lpMove = onPointerMove;
     content._lpUp = onPointerUp;
+    content._lpTouchStart = onTouchStart;
+    content._lpTouchMove = onTouchMove;
+    content._lpTouchEnd = onTouchEnd;
+
     content.addEventListener('pointerdown', onPointerDown);
+    content.addEventListener('pointermove', onPointerMove);
     content.addEventListener('pointerup', onPointerUp);
-    content.addEventListener('pointermove', onPointerUp);
+    content.addEventListener('touchstart', onTouchStart, { passive: true });
+    content.addEventListener('touchmove', onTouchMove, { passive: true });
+    content.addEventListener('touchend', onTouchEnd);
   }
 
   function removeLongPress() {
     const content = document.getElementById('reader-content');
+    if (!content) return;
     if (content._lpDown) content.removeEventListener('pointerdown', content._lpDown);
-    if (content._lpUp) {
-      content.removeEventListener('pointerup', content._lpUp);
-      content.removeEventListener('pointermove', content._lpUp);
-    }
+    if (content._lpMove) content.removeEventListener('pointermove', content._lpMove);
+    if (content._lpUp) content.removeEventListener('pointerup', content._lpUp);
+    if (content._lpTouchStart) content.removeEventListener('touchstart', content._lpTouchStart);
+    if (content._lpTouchMove) content.removeEventListener('touchmove', content._lpTouchMove);
+    if (content._lpTouchEnd) content.removeEventListener('touchend', content._lpTouchEnd);
+    delete content._lpDown; delete content._lpMove; delete content._lpUp;
+    delete content._lpTouchStart; delete content._lpTouchMove; delete content._lpTouchEnd;
   }
 
   function getTextContext(range) {
